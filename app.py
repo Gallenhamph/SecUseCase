@@ -31,7 +31,6 @@ class CyberScenarioGenerator:
     def generate_recommendations(self, inputs):
         recs = []
         
-        # --- 1. ADVISORY & TESTING ASSESSMENTS ---
         recs.append("🛡️ **SECURITY ASSESSMENTS & ADVISORY**")
         
         if inputs['in_house_team'] == "Yes (24/7)" and inputs['savviness'] in ["Medium", "High"]:
@@ -63,8 +62,6 @@ class CyberScenarioGenerator:
         if inputs['servers'] > 50:
             recs.append("• Sophos Compromise Assessment: Proactively hunt for existing persistence mechanisms or dormant threats currently hiding in your data center.")
 
-
-        # --- 2. SOPHOS PORTFOLIO SOLUTIONS ---
         recs.append("\n⚙️ **RECOMMENDED SOPHOS SOLUTIONS**")
         
         recs.append("• Sophos Managed Risk: Implement continuous external attack surface management to discover and prioritize exposed vulnerabilities across your evolving tech stack before they can be weaponized.")
@@ -147,7 +144,69 @@ def write_safe_text(pdf, text, font_family="helvetica"):
         else:
             pdf.ln(3)
 
+def draw_visual_timeline(pdf, timeline_text):
+    """Draws a graphical timeline down the left margin with circles and lines."""
+    if not timeline_text: return
+    
+    draw_section_header(pdf, "Attack Timeline & MDR Intervention")
+    entries = timeline_text.strip().split('\n')
+    
+    x_node = 20
+    x_text = 30
+    
+    for i, entry in enumerate(entries):
+        if not entry.strip() or '|' not in entry: 
+            continue
+            
+        timestamp, event = entry.split('|', 1)
+        
+        # Prevent page breaks in the middle of drawing a node
+        if pdf.get_y() > 250:
+            pdf.add_page()
+            
+        start_y = pdf.get_y()
+        
+        # Draw Node (Sophos Blue Circle)
+        pdf.set_fill_color(0, 32, 96)
+        pdf.ellipse(x=x_node - 2, y=start_y + 1, w=4, h=4, style='F')
+        
+        # Print Timestamp
+        pdf.set_x(x_text)
+        pdf.set_font("helvetica", "B", 10)
+        pdf.set_text_color(0, 32, 96)
+        pdf.cell(w=0, h=6, txt=clean_text(timestamp.strip()), new_x="LMARGIN", new_y="NEXT")
+        
+        # Print Event Description
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("helvetica", "", 10)
+        wrapped_event = textwrap.wrap(clean_text(event.strip()), width=85, break_long_words=True)
+        
+        for line in wrapped_event:
+            pdf.set_x(x_text)
+            pdf.cell(w=0, h=5, txt=line, new_x="LMARGIN", new_y="NEXT")
+            
+        end_y = pdf.get_y()
+        
+        # Draw connecting vertical line to the next node
+        if i < len(entries) - 1:
+            pdf.set_draw_color(200, 200, 200)
+            pdf.set_line_width(0.5)
+            # Line goes from bottom of current node to top of next node space
+            pdf.line(x_node, start_y + 6, x_node, end_y + 2)
+            
+        pdf.ln(5)
+
 def create_pdf(inputs, scenario, recs, mdr_case):
+    # Extract timeline from narrative using regex
+    timeline_match = re.search(r'\[TIMELINE_START\](.*?)\[TIMELINE_END\]', scenario, re.DOTALL)
+    if timeline_match:
+        timeline_text = timeline_match.group(1).strip()
+        # Remove the timeline from the main scenario string so we don't print it twice
+        main_scenario = re.sub(r'\[TIMELINE_START\].*?\[TIMELINE_END\]', '', scenario, flags=re.DOTALL).strip()
+    else:
+        timeline_text = None
+        main_scenario = scenario
+
     pdf = ReportPDF()
     pdf.add_page()
     
@@ -179,8 +238,13 @@ def create_pdf(inputs, scenario, recs, mdr_case):
     pdf.ln(6)
     
     draw_section_header(pdf, "Targeted Threat Narrative & Solutions")
-    write_safe_text(pdf, clean_text(scenario))
+    write_safe_text(pdf, clean_text(main_scenario))
     pdf.ln(6)
+    
+    # Draw the visual graphical timeline if the LLM provided it
+    if timeline_text:
+        draw_visual_timeline(pdf, timeline_text)
+        pdf.ln(6)
     
     pdf.add_page() 
     draw_section_header(pdf, "Simulated Sophos MDR Case Log")
@@ -200,7 +264,6 @@ def create_pdf(inputs, scenario, recs, mdr_case):
     
     draw_section_header(pdf, "Recommended Security Testing & Advisory")
     for r in recs:
-        # Avoid bulleting the main section headers
         if r.startswith("🛡️") or r.startswith("⚙️"):
             pdf.ln(3)
             write_safe_text(pdf, clean_text(r))
@@ -212,6 +275,10 @@ def create_pdf(inputs, scenario, recs, mdr_case):
     return bytes(pdf.output())
 
 def create_pptx(inputs, scenario, recs, mdr_case):
+    # Strip timeline tags for PPTX so they don't show up in the text
+    scenario_clean = re.sub(r'\[TIMELINE_START\]', '\n--- Attack Timeline ---\n', scenario)
+    scenario_clean = re.sub(r'\[TIMELINE_END\]', '', scenario_clean)
+
     prs = Presentation()
     
     title_slide_layout = prs.slide_layouts[0]
@@ -229,7 +296,7 @@ def create_pptx(inputs, scenario, recs, mdr_case):
     title_shape2.text = "Attack Scenario & Solutions"
     tf2 = body_shape2.text_frame
     p = tf2.add_paragraph()
-    p.text = clean_text(scenario[:500]) + "..." 
+    p.text = clean_text(scenario_clean[:500]) + "..." 
     
     slide3 = prs.slides.add_slide(bullet_slide_layout)
     shapes3 = slide3.shapes
@@ -293,7 +360,6 @@ with st.sidebar:
     endpoints = st.number_input("Number of Endpoints", min_value=1, value=600)
     servers = st.number_input("Number of Servers", min_value=1, value=50)
     
-    # Expanded Technology Segments
     endpoint = st.selectbox("Endpoint Security", ["Sophos", "Microsoft Defender", "CrowdStrike", "SentinelOne", "Trend Micro", "Symantec", "Trellix", "Blackberry Cylance", "Other"])
     firewall = st.selectbox("Firewall Vendor", ["Fortinet", "Palo Alto", "Cisco", "Check Point", "SonicWall", "WatchGuard", "Juniper", "Barracuda", "Forcepoint", "Sophos", "Other"])
     identity = st.selectbox("Identity Provider", ["Microsoft Entra ID (Azure AD)", "Okta", "Cisco Duo", "Ping Identity", "On-Prem Active Directory", "None / Local Only"])
@@ -316,7 +382,6 @@ if generate_btn:
     }
     
     with st.spinner("Analyzing estate and generating narrative with Gemini 2.5 Flash..."):
-        # OSINT is now mapped against the endpoint and firewall primarily
         osint_data = f"{app_engine.fetch_osint(firewall)} {app_engine.fetch_osint(endpoint)}"
         
         narrative_prompt = build_scenario_prompt(client_inputs, osint_data)
@@ -329,11 +394,15 @@ if generate_btn:
         
     st.success("Analysis Complete!")
     
+    # Strip tags for the UI so the Streamlit dashboard remains clean
+    ui_scenario = re.sub(r'\[TIMELINE_START\]', '\n#### Attack Timeline\n', scenario)
+    ui_scenario = re.sub(r'\[TIMELINE_END\]', '', ui_scenario)
+    
     tab1, tab2, tab3 = st.tabs(["📝 Threat Narrative", "🛡️ Sophos Central MDR Log", "🎯 Recommendations"])
     
     with tab1:
         st.subheader(f"Threat Narrative & Solutions for {customer_name}")
-        st.write(scenario)
+        st.write(ui_scenario)
         
     with tab2:
         st.subheader("Simulated MDR Investigation")
