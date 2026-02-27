@@ -9,14 +9,18 @@ CORE OBJECTIVES:
 1. Emphasize the "Human Element": Always exploit human vulnerabilities (alert fatigue, skill gaps, off-hours attacks, or social engineering) rather than just relying on technical exploits.
 2. The "Bring Your Own Tech" (BYOT) Angle: Illustrate how isolated security tools fail to stop lateral movement without cross-platform correlation.
 3. Position Sophos MDR: Clearly articulate how human-led threat hunting, 24/7 coverage, and cross-vendor telemetry ingestion would have interrupted the attack chain before the final impact.
-4. Enrich information about the Sophos and secureworks testing to provide additional context to te security testing and advisory section
-5. Provide additional context to the customers critical infrastructure and add why the attacker moving to these solutions could be dangerous
-
+4. Enrich Information: Provide additional context to the security testing and advisory section regarding the specific value of Sophos and Secureworks testing.
+5. Critical Infrastructure Context: Provide additional context to the customer's critical infrastructure and detail exactly why the attacker targeting these specific solutions/data could be catastrophic.
+6. Recommend Portfolio Products: Always suggest specific Sophos products (e.g., Sophos Intercept X, Sophos Email, Sophos Phish Threat, Sophos ZTNA, Sophos Firewall) that map directly to the vulnerabilities exploited in the narrative.
 """
 
 def build_scenario_prompt(client_inputs, osint_data):
     return f"""
-    Based on the following client profile, generate a 3-paragraph breach scenario.
+    Based on the following client profile, generate a seamless 4-paragraph breach scenario and solutions summary.
+
+    ENGAGEMENT DETAILS:
+    - Customer: {client_inputs['customer_name']}
+    - Consultant: {client_inputs['consultant_name']}
 
     CLIENT ENVIRONMENT:
     - Industry: {client_inputs['industry']}
@@ -30,13 +34,12 @@ def build_scenario_prompt(client_inputs, osint_data):
     - Recent vulnerabilities/trends to weave in: {osint_data}
 
     SCENARIO REQUIREMENTS:
-    - Paragraph 1: Initial Access & The Human Element. Describe how attackers bypassed the perimeter using the OSINT data and exploited the user's '{client_inputs['savviness']}' savviness level.
-    - Paragraph 2: Lateral Movement & Alert Fatigue. Detail how the attacker moved toward the {client_inputs['critical_infra']}. Highlight why the {client_inputs['firewall']} missed it and how the in-house team ({client_inputs['in_house_team']}) was overwhelmed or offline.
-    - Paragraph 3: The Sophos MDR Differentiator. Explain exactly how Sophos MDR's 24/7 expert analysts, utilizing telemetry from the client's existing stack, would have neutralized the threat.
+    - Paragraph 1 (Initial Access & The Human Element): Describe how attackers bypassed the perimeter using the provided OSINT data alongside wider real-world news/trends. Explicitly exploit the {client_inputs['customer_name']} users' '{client_inputs['savviness']}' savviness level. Include real-world reported threat actor behaviors where possible.
+    - Paragraph 2 (Lateral Movement & Alert Fatigue): Detail how the attacker moved toward the {client_inputs['critical_infra']}. Highlight the specific danger of this asset being compromised. Explain why the {client_inputs['firewall']} missed the lateral movement and how the in-house team ({client_inputs['in_house_team']}) was overwhelmed or offline.
+    - Paragraph 3 (The Sophos MDR Differentiator): Explain exactly how Sophos MDR's 24/7 expert analysts, utilizing telemetry from the client's existing stack, would have neutralized the threat.
+    - Paragraph 4 (Recommended Solutions Summary): Summarize the defense strategy. Explicitly name 2-3 additional Sophos products (e.g., Sophos Intercept X Advanced with XDR, Sophos Email, Sophos Phish Threat, Sophos ZTNA) that would proactively prevent this specific attack path, and ensure additional and correct context is provided around the Sophos and Secureworks security testing recommendations.
 
-    Hide paragraph headings and ensure additional and correct context around recommendations and requirements
-
-    Include real worls or reported news scenarios where possible
-
-    Hide the applied OSINT section but ensure that valid OSINT both from within the prompt and wider sources are included in the response
+    FORMATTING CONSTRAINTS:
+    - Hide paragraph headings (e.g., do not write "Paragraph 1:", "Initial Access:", etc. Ensure it reads like a continuous brief).
+    - Hide the applied OSINT section. Ensure that valid OSINT from both the prompt and wider sources is naturally integrated into the narrative without explicitly calling it out.
     """

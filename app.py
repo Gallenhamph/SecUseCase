@@ -12,7 +12,6 @@ from prompts import SYSTEM_PERSONA, build_scenario_prompt
 class CyberScenarioGenerator:
     def __init__(self, api_key):
         self.api_key = api_key
-        # Initialize the new Google GenAI Client
         if self.api_key and self.api_key != "YOUR_API_KEY_HERE":
             self.client = genai.Client(api_key=self.api_key)
         else:
@@ -56,9 +55,8 @@ class CyberScenarioGenerator:
         full_prompt = f"{SYSTEM_PERSONA}\n\n{prompt}"
         
         try:
-            # Using the new models.generate_content format
             response = self.client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-2.5-pro',
                 contents=full_prompt
             )
             return response.text
@@ -66,9 +64,7 @@ class CyberScenarioGenerator:
             return f"⚠️ An error occurred while communicating with the Gemini API: {e}"
 
 # --- EXPORT LOGIC ---
-# --- EXPORT LOGIC ---
 def clean_text(text):
-    """Strips Markdown and non-ASCII characters without breaking line structures."""
     if not text: return ""
     text = text.replace('\xa0', ' ').replace('\t', ' ')
     text = text.replace('**', '').replace('*', '').replace('#', '')
@@ -78,29 +74,24 @@ def clean_text(text):
     return text.strip()
 
 def write_safe_text(pdf, text):
-    """
-    Bypasses FPDF's fragile multi_cell word-wrap engine. 
-    Uses Python's native textwrap to forcefully slice text into lines of 95 chars.
-    """
     paragraphs = text.split('\n')
     for paragraph in paragraphs:
         if paragraph.strip():
-            # Force wraps lines and cuts aggressively long strings (like URLs)
             lines = textwrap.wrap(paragraph, width=95, break_long_words=True)
             for line in lines:
-                # Print single lines natively - impossible to trigger horizontal space errors
                 pdf.cell(w=0, h=6, txt=line, new_x="LMARGIN", new_y="NEXT")
         else:
-            # Maintain paragraph breaks naturally
             pdf.ln(4)
 
 def create_pdf(inputs, osint, scenario, recs):
     pdf = FPDF()
     pdf.add_page()
     
-    # Title
+    # Title & Engagement Details
     pdf.set_font("helvetica", "B", 16)
     pdf.cell(w=0, h=10, txt="Cybersecurity Threat & Advisory Report", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_font("helvetica", "I", 11)
+    pdf.cell(w=0, h=8, txt=f"Prepared for: {inputs['customer_name']} | By: {inputs['consultant_name']}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(5)
     
     # Section 1: Summary
@@ -118,14 +109,14 @@ def create_pdf(inputs, osint, scenario, recs):
     write_safe_text(pdf, clean_text(osint))
     pdf.ln(5)
     
-    # Section 3: Scenario
+    # Section 3: Scenario & Product Summary (Combined output from LLM)
     pdf.set_font("helvetica", "B", 12)
-    pdf.cell(w=0, h=10, txt="Targeted Threat Narrative", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(w=0, h=10, txt="Targeted Threat Narrative & Solutions Summary", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("helvetica", "", 10)
     write_safe_text(pdf, clean_text(scenario))
     pdf.ln(5)
     
-    # Section 4: Recommendations
+    # Section 4: Advisory Recommendations
     pdf.set_font("helvetica", "B", 12)
     pdf.cell(w=0, h=10, txt="Recommended Advisory & Testing Services", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("helvetica", "", 10)
@@ -134,38 +125,40 @@ def create_pdf(inputs, osint, scenario, recs):
         
     return bytes(pdf.output())
 
-# ... Keep create_pptx below exactly as it was!
-
 def create_pptx(inputs, osint, scenario, recs):
     prs = Presentation()
     
+    # Title Slide
     title_slide_layout = prs.slide_layouts[0]
     slide = prs.slides.add_slide(title_slide_layout)
     title = slide.shapes.title
     subtitle = slide.placeholders[1]
     title.text = "Threat Modeling & MDR Assessment"
-    subtitle.text = f"Prepared for {inputs['industry']} Sector"
+    subtitle.text = f"Prepared for: {inputs['customer_name']}\nPresented by: {inputs['consultant_name']}\n{inputs['industry']} Sector"
     
+    # Narrative Slide
     bullet_slide_layout = prs.slide_layouts[1]
     slide2 = prs.slides.add_slide(bullet_slide_layout)
     shapes2 = slide2.shapes
     title_shape2 = shapes2.title
     body_shape2 = shapes2.placeholders[1]
-    title_shape2.text = "Attack Scenario"
+    title_shape2.text = "Attack Scenario & Solutions"
     tf2 = body_shape2.text_frame
-    tf2.text = osint
+    tf2.text = clean_text(osint)
     p = tf2.add_paragraph()
-    p.text = scenario[:250] + "..." 
+    # Truncated slightly to fit on a slide, leaving the full summary for the PDF
+    p.text = clean_text(scenario[:450]) + "..." 
     
+    # Recommendations Slide
     slide3 = prs.slides.add_slide(bullet_slide_layout)
     shapes3 = slide3.shapes
     title_shape3 = shapes3.title
     body_shape3 = shapes3.placeholders[1]
-    title_shape3.text = "Testing & MDR Recommendations"
+    title_shape3.text = "Testing & Advisory Recommendations"
     tf3 = body_shape3.text_frame
     for r in recs:
         p = tf3.add_paragraph()
-        p.text = r
+        p.text = clean_text(r)
         
     pptx_stream = io.BytesIO()
     prs.save(pptx_stream)
@@ -175,7 +168,7 @@ def create_pptx(inputs, osint, scenario, recs):
 st.set_page_config(page_title="MDR & Testing Scenario Generator", page_icon="🛡️", layout="wide")
 
 st.title("🛡️ MDR & Offensive Security Scenario Generator")
-st.markdown("Generate highly tailored cyberattack scenarios and export to PDF/PPTX using Google Gemini Pro.")
+st.markdown("Generate highly tailored cyberattack scenarios and export to personalized PDF/PPTX reports.")
 
 try:
     gemini_key = st.secrets["GEMINI_API_KEY"]
@@ -186,6 +179,10 @@ except KeyError:
 app_engine = CyberScenarioGenerator(api_key=gemini_key)
 
 with st.sidebar:
+    st.header("📋 Engagement Details")
+    customer_name = st.text_input("Customer Name", "Acme Corp")
+    consultant_name = st.text_input("Consultant Name", "Jane Doe")
+    
     st.header("🏢 Client Estate Details")
     industry = st.selectbox("Industry Vertical", ["Healthcare", "Finance", "Manufacturing", "Retail", "Technology", "Education"])
     critical_infra = st.text_input("Critical Infrastructure/Crown Jewels", "Patient Records Database")
@@ -209,6 +206,7 @@ with st.sidebar:
 
 if generate_btn:
     client_inputs = {
+        "customer_name": customer_name, "consultant_name": consultant_name,
         "industry": industry, "users": users, "savviness": savviness, 
         "endpoints": endpoints, "servers": servers, "critical_infra": critical_infra,
         "firewall": firewall, "other_vendors": other_vendors, "in_house_team": in_house_team,
@@ -223,7 +221,7 @@ if generate_btn:
         
     st.success("Analysis Complete!")
     
-    st.subheader("📝 Generated Threat Narrative")
+    st.subheader(f"📝 Threat Narrative & Solutions for {customer_name}")
     st.info(f"**OSINT Context Applied:** {osint_data}")
     st.write(scenario)
     
@@ -244,7 +242,7 @@ if generate_btn:
             st.download_button(
                 label="📄 Download PDF Report",
                 data=pdf_bytes,
-                file_name="MDR_Scenario_Report.pdf",
+                file_name=f"{customer_name.replace(' ', '_')}_MDR_Report.pdf",
                 mime="application/pdf"
             )
             
@@ -252,6 +250,6 @@ if generate_btn:
             st.download_button(
                 label="📊 Download PowerPoint Deck",
                 data=pptx_bytes,
-                file_name="MDR_Scenario_Deck.pptx",
+                file_name=f"{customer_name.replace(' ', '_')}_MDR_Deck.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
             )
