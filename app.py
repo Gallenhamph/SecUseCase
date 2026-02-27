@@ -6,7 +6,7 @@ import textwrap
 from google import genai
 from fpdf import FPDF
 from pptx import Presentation
-from prompts import SYSTEM_PERSONA, build_scenario_prompt
+from prompts import SYSTEM_PERSONA, build_scenario_prompt, build_mdr_case_prompt
 
 # --- BACKEND LOGIC ---
 class CyberScenarioGenerator:
@@ -55,6 +55,7 @@ class CyberScenarioGenerator:
         full_prompt = f"{SYSTEM_PERSONA}\n\n{prompt}"
         
         try:
+            # Using Gemini 2.5 Flash for high-speed, cost-effective generation
             response = self.client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=full_prompt
@@ -64,48 +65,35 @@ class CyberScenarioGenerator:
             return f"⚠️ An error occurred while communicating with the Gemini API: {e}"
 
 # --- EXPORT LOGIC ---
-
-# 1. Custom PDF Class for Branding & Layout
 class ReportPDF(FPDF):
     def header(self):
-        # Dark Blue Top Banner
-        self.set_fill_color(0, 32, 96)  # Corporate Dark Blue
-        self.rect(0, 0, 210, 20, 'F')   # A4 width is 210mm
-        
-        # Banner Text
+        self.set_fill_color(0, 32, 96) 
+        self.rect(0, 0, 210, 20, 'F')   
         self.set_y(6)
         self.set_font('helvetica', 'B', 12)
-        self.set_text_color(255, 255, 255) # White text
+        self.set_text_color(255, 255, 255)
         self.cell(0, 10, 'Threat Modeling & MDR Assessment', align='R')
-        
-        # Reset Y position and color for the page body
         self.set_y(25)
         self.set_text_color(0, 0, 0)
 
     def footer(self):
-        # Gray Footer with Page Numbers
         self.set_y(-15)
         self.set_font('helvetica', 'I', 8)
         self.set_text_color(128, 128, 128)
         self.cell(0, 10, f'Page {self.page_no()}', align='C')
 
 def draw_section_header(pdf, title):
-    """Draws a stylish section header with a colored bottom border."""
     pdf.ln(5)
     pdf.set_font("helvetica", "B", 14)
-    pdf.set_text_color(0, 32, 96) # Dark Blue
+    pdf.set_text_color(0, 32, 96) 
     pdf.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
-    
-    # Draw horizontal line under title
-    pdf.set_draw_color(200, 200, 200) # Light Gray line
+    pdf.set_draw_color(200, 200, 200) 
     pdf.set_line_width(0.5)
-    pdf.line(pdf.get_x(), pdf.get_y(), 210 - 15, pdf.get_y()) # 15mm right margin
-    
+    pdf.line(pdf.get_x(), pdf.get_y(), 210 - 15, pdf.get_y()) 
     pdf.ln(4)
-    pdf.set_text_color(0, 0, 0) # Reset to black text
+    pdf.set_text_color(0, 0, 0)
 
 def clean_text(text):
-    """Strips Markdown and non-ASCII characters without breaking line structures."""
     if not text: return ""
     text = text.replace('\xa0', ' ').replace('\t', ' ')
     text = text.replace('**', '').replace('*', '').replace('#', '')
@@ -114,9 +102,8 @@ def clean_text(text):
     text = text.encode('ascii', 'ignore').decode('ascii')
     return text.strip()
 
-def write_safe_text(pdf, text):
-    """Bypasses FPDF word-wrap bugs using Python textwrap."""
-    pdf.set_font("helvetica", "", 10)
+def write_safe_text(pdf, text, font_family="helvetica"):
+    pdf.set_font(font_family, "", 10)
     paragraphs = text.split('\n')
     for paragraph in paragraphs:
         if paragraph.strip():
@@ -126,25 +113,22 @@ def write_safe_text(pdf, text):
         else:
             pdf.ln(3)
 
-def create_pdf(inputs, scenario, recs):
-    # Initialize our new custom PDF class
+def create_pdf(inputs, scenario, recs, mdr_case):
     pdf = ReportPDF()
     pdf.add_page()
     
-    # Title & Engagement Details (Centered, Large)
     pdf.set_font("helvetica", "B", 18)
     pdf.cell(w=0, h=12, txt="Cybersecurity Threat & Advisory Report", new_x="LMARGIN", new_y="NEXT", align="C")
     
     pdf.set_font("helvetica", "I", 11)
-    pdf.set_text_color(100, 100, 100) # Gray
+    pdf.set_text_color(100, 100, 100) 
     pdf.cell(w=0, h=6, txt=f"Prepared for: {inputs['customer_name']}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.cell(w=0, h=6, txt=f"Presented by: {inputs['consultant_name']}", new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.set_text_color(0, 0, 0) # Reset
+    pdf.set_text_color(0, 0, 0) 
     pdf.ln(8)
     
-    # Section 1: Summary (using a light gray background box for flair)
     draw_section_header(pdf, "Client Estate Summary")
-    pdf.set_fill_color(245, 245, 245) # Light gray box
+    pdf.set_fill_color(245, 245, 245) 
     pdf.set_font("helvetica", "", 10)
     
     summary_text = (
@@ -153,28 +137,40 @@ def create_pdf(inputs, scenario, recs):
         f"Perimeter: {inputs['firewall']} Firewall   |   Internal Security: {inputs['in_house_team']}"
     )
     
-    # We print the box manually line by line to keep it safe
     for line in summary_text.split('\n'):
         pdf.cell(w=0, h=7, txt=f"  {line}", new_x="LMARGIN", new_y="NEXT", fill=True)
     
     pdf.ln(6)
     
-    # Section 2: The LLM Narrative (Notice OSINT is removed as requested)
-    draw_section_header(pdf, "Targeted Threat Narrative & Solutions Summary")
+    draw_section_header(pdf, "Targeted Threat Narrative & Solutions")
     write_safe_text(pdf, clean_text(scenario))
     pdf.ln(6)
     
-    # Section 3: Advisory Recommendations
-    draw_section_header(pdf, "Recommended Security Testing & Advisory Services")
+    # Mocked MDR Case Section
+    pdf.add_page() 
+    draw_section_header(pdf, "Simulated Sophos MDR Case Log")
+    
+    pdf.set_font("courier", "", 9)
+    pdf.set_fill_color(240, 248, 255) 
+    
+    clean_mdr = clean_text(mdr_case)
+    for line in clean_mdr.split('\n'):
+        wrapped_lines = textwrap.wrap(line, width=85, break_long_words=True)
+        if not wrapped_lines:
+            pdf.cell(w=0, h=5, txt="", new_x="LMARGIN", new_y="NEXT", fill=True)
+        for w_line in wrapped_lines:
+            pdf.cell(w=0, h=5, txt=f" {w_line}", new_x="LMARGIN", new_y="NEXT", fill=True)
+            
+    pdf.ln(6)
+    
+    draw_section_header(pdf, "Recommended Security Testing & Advisory")
     for r in recs:
-        # Adding a bit of visual flair to the bullet points
         write_safe_text(pdf, clean_text(f"•  {r}"))
         pdf.ln(1)
         
     return bytes(pdf.output())
 
-def create_pptx(inputs, scenario, recs):
-    # Note: I removed the explicit OSINT block from the PPTX generator here too!
+def create_pptx(inputs, scenario, recs, mdr_case):
     prs = Presentation()
     
     title_slide_layout = prs.slide_layouts[0]
@@ -194,15 +190,32 @@ def create_pptx(inputs, scenario, recs):
     p = tf2.add_paragraph()
     p.text = clean_text(scenario[:500]) + "..." 
     
+    # MDR Case Slide
     slide3 = prs.slides.add_slide(bullet_slide_layout)
     shapes3 = slide3.shapes
     title_shape3 = shapes3.title
     body_shape3 = shapes3.placeholders[1]
-    title_shape3.text = "Testing & Advisory Recommendations"
+    title_shape3.text = "Simulated MDR Investigation"
     tf3 = body_shape3.text_frame
+    
+    analysis_match = re.search(r'//Analysis:(.*?)//Response Actions:', mdr_case, re.DOTALL)
+    if analysis_match:
+        analysis_text = clean_text(analysis_match.group(1).strip())
+    else:
+        analysis_text = clean_text(mdr_case[:300]) + "..."
+        
+    p2 = tf3.add_paragraph()
+    p2.text = analysis_text
+    
+    slide4 = prs.slides.add_slide(bullet_slide_layout)
+    shapes4 = slide4.shapes
+    title_shape4 = shapes4.title
+    body_shape4 = shapes4.placeholders[1]
+    title_shape4.text = "Testing & Advisory Recommendations"
+    tf4 = body_shape4.text_frame
     for r in recs:
-        p = tf3.add_paragraph()
-        p.text = clean_text(r)
+        p4 = tf4.add_paragraph()
+        p4.text = clean_text(r)
         
     pptx_stream = io.BytesIO()
     prs.save(pptx_stream)
@@ -212,7 +225,7 @@ def create_pptx(inputs, scenario, recs):
 st.set_page_config(page_title="MDR & Testing Scenario Generator", page_icon="🛡️", layout="wide")
 
 st.title("🛡️ MDR & Offensive Security Scenario Generator")
-st.markdown("Generate highly tailored cyberattack scenarios and export to personalized PDF/PPTX reports.")
+st.markdown("Generate highly tailored cyberattack scenarios, complete with mock Sophos Central case logs.")
 
 try:
     gemini_key = st.secrets["GEMINI_API_KEY"]
@@ -246,7 +259,7 @@ with st.sidebar:
     physical_locations = st.number_input("Number of Physical Offices/Locations", min_value=1, value=3)
     public_web_apps = st.checkbox("Host Public-Facing Web Applications?")
 
-    generate_btn = st.button("Generate Scenario", type="primary")
+    generate_btn = st.button("Generate Full Scenario", type="primary")
 
 if generate_btn:
     client_inputs = {
@@ -257,44 +270,59 @@ if generate_btn:
         "physical_locations": physical_locations, "public_web_apps": public_web_apps
     }
     
-    with st.spinner("Analyzing estate and generating narrative with Gemini Pro..."):
+    with st.spinner("Analyzing estate and generating narrative with Gemini 2.5 Flash..."):
         osint_data = app_engine.fetch_osint(firewall)
-        prompt = build_scenario_prompt(client_inputs, osint_data)
-        scenario = app_engine.call_llm(prompt)
+        
+        # 1. Generate Narrative
+        narrative_prompt = build_scenario_prompt(client_inputs, osint_data)
+        scenario = app_engine.call_llm(narrative_prompt)
+        
+        # 2. Generate Technical Case Log
+        case_prompt = build_mdr_case_prompt(client_inputs, scenario)
+        mdr_case = app_engine.call_llm(case_prompt)
+        
         recs = app_engine.generate_recommendations(client_inputs)
         
     st.success("Analysis Complete!")
     
-    st.subheader(f"📝 Threat Narrative & Solutions for {customer_name}")
-    st.info(f"**OSINT Context Applied:** {osint_data}")
-    st.write(scenario)
+    # Create tabs in Streamlit to keep the UI clean
+    tab1, tab2, tab3 = st.tabs(["📝 Threat Narrative", "🛡️ Sophos Central MDR Log", "🎯 Recommendations"])
     
-    st.subheader("🎯 Recommended Security Testing & Advisory")
-    for rec in recs:
-        st.markdown(f"- {rec}")
+    with tab1:
+        st.subheader(f"Threat Narrative & Solutions for {customer_name}")
+        st.write(scenario)
+        
+    with tab2:
+        st.subheader("Simulated MDR Investigation")
+        st.info("This output mimics the Case Details view a customer would receive in Sophos Central.")
+        st.code(mdr_case, language="markdown")
+        
+    with tab3:
+        st.subheader("Recommended Security Testing & Advisory")
+        for rec in recs:
+            st.markdown(f"- {rec}")
         
     st.divider()
     
     if "⚠️ Error" not in scenario and "⚠️ An error" not in scenario:
-            # FIX: We now only pass 3 arguments: client_inputs, scenario, and recs
-            pdf_bytes = create_pdf(client_inputs, scenario, recs)
-            pptx_bytes = create_pptx(client_inputs, scenario, recs)
+        pdf_bytes = create_pdf(client_inputs, scenario, recs, mdr_case)
+        pptx_bytes = create_pptx(client_inputs, scenario, recs, mdr_case)
+        
+        st.subheader("📥 Export Client Deliverables")
+        dl_col1, dl_col2 = st.columns(2)
+        
+        with dl_col1:
+            st.download_button(
+                label="📄 Download PDF Report",
+                data=pdf_bytes,
+                file_name=f"{customer_name.replace(' ', '_')}_MDR_Report.pdf",
+                mime="application/pdf"
+            )
             
-            st.subheader("📥 Export Client Deliverables")
-            dl_col1, dl_col2 = st.columns(2)
-            
-            with dl_col1:
-                st.download_button(
-                    label="📄 Download PDF Report",
-                    data=pdf_bytes,
-                    file_name=f"{customer_name.replace(' ', '_')}_MDR_Report.pdf",
-                    mime="application/pdf"
-                )
-                
-            with dl_col2:
-                st.download_button(
-                    label="📊 Download PowerPoint Deck",
-                    data=pptx_bytes,
-                    file_name=f"{customer_name.replace(' ', '_')}_MDR_Deck.pptx",
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                )
+        with dl_col2:
+            st.download_button(
+                label="📊 Download PowerPoint Deck",
+                data=pptx_bytes,
+                file_name=f"{customer_name.replace(' ', '_')}_MDR_Deck.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            )
