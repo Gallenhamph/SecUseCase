@@ -6,7 +6,7 @@ Instead of relying on generic cybersecurity pitches, this application takes a cu
 
 ## ✨ Key Features
 
-* **🧠 Advanced AI Narrative Generation:** Powered by the modern `google-genai` SDK and Gemini 2.5 Pro. The AI acts as a Principal Cybersecurity Architect, blending real-world news, OSINT, and customer telemetry into a seamless, highly realistic attack narrative.
+* **🧠 Advanced AI Narrative Generation:** Powered by the modern `google-genai` SDK and Gemini 2.5 Flash. The AI acts as a Principal Cybersecurity Architect, blending real-world news, OSINT, and customer telemetry into a seamless, highly realistic attack narrative.
 * **🎯 Sophos & Secureworks Mapping:** Automatically recommends tailored security assessments based on the customer's digital and physical footprint, including:
   * Secureworks Adversary Exercises (Red Teaming) & Tabletop Exercises
   * Sophos Internal/External & Wireless Penetration Testing
@@ -19,7 +19,7 @@ Instead of relying on generic cybersecurity pitches, this application takes a cu
 
 ## 🛠️ Technology Stack
 * **Frontend:** [Streamlit](https://streamlit.io/) (Interactive Web UI)
-* **LLM Engine:** Google Gemini (`gemini-2.5-pro` via `google-genai`)
+* **LLM Engine:** Google Gemini (`gemini-2.5-flash` via `google-genai`)
 * **Document Generation:** `fpdf2` (PDFs) and `python-pptx` (Presentations)
 * **Data Processing:** Python 3.x native libraries (`re`, `textwrap`, `io`)
 
