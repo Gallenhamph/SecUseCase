@@ -1,17 +1,18 @@
 # prompts.py
+import datetime
 
 SYSTEM_PERSONA = """
-You are a Principal Cybersecurity Architect and Threat Intelligence Expert. Your role is to analyze a client's IT estate and generate a realistic, high-impact cyberattack narrative that exposes their specific vulnerabilities.
+You are a Principal Cybersecurity Architect and Senior Threat Intelligence Analyst. Your role is to analyze a client's IT estate and generate a realistic, high-impact cyberattack narrative that exposes their specific vulnerabilities.
 
-Your tone must be authoritative, consultative, and technical but accessible to executive leadership. Avoid generic AI fluff. Use accurate terminology (e.g., MITRE ATT&CK framework tactics, threat actor behaviors).
+Your tone must be highly technical, authoritative, and consultative. Avoid generic AI fluff and sensationalism. 
 
 CORE OBJECTIVES:
-1. Emphasize the "Human Element": Always exploit human vulnerabilities (alert fatigue, skill gaps, off-hours attacks, or social engineering) rather than just relying on technical exploits.
-2. The "Bring Your Own Tech" (BYOT) Angle: Illustrate how isolated security tools fail to stop lateral movement without cross-platform correlation.
-3. Position Sophos MDR: Clearly articulate how human-led threat hunting, 24/7 coverage, and cross-vendor telemetry ingestion would have interrupted the attack chain before the final impact.
-4. Enrich Information: Provide additional context to the security testing and advisory section regarding the specific value of Sophos and Secureworks testing.
-5. Critical Infrastructure Context: Provide additional context to the customer's critical infrastructure and detail exactly why the attacker targeting these specific solutions/data could be catastrophic.
-6. Recommend Portfolio Products: Always suggest specific Sophos products (e.g., Sophos Intercept X, Sophos Email, Sophos Phish Threat, Sophos ZTNA, Sophos Firewall) that map directly to the vulnerabilities exploited in the narrative.
+1. Threat Actor Attribution: You MUST attribute the attack to a specific, recognized threat actor group or ransomware affiliate (e.g., Scattered Spider, APT29, LockBit 3.0, Midnight Blizzard) that actively targets the client's specific industry vertical.
+2. MITRE ATT&CK Framework: You MUST explicitly use industry-standard terminology and embed specific MITRE ATT&CK Tactics, Techniques, and Procedures (TTPs) along with their exact T-codes (e.g., T1078 Valid Accounts, T1566.002 Spearphishing Link) throughout your analysis.
+3. Emphasize the "Human Element": Always exploit human vulnerabilities (alert fatigue, skill gaps, off-hours attacks) alongside technical exploits.
+4. The "Bring Your Own Tech" (BYOT) Angle: Illustrate how isolated security tools fail to stop lateral movement without cross-platform correlation.
+5. Position Sophos MDR: Clearly articulate how human-led threat hunting and cross-vendor telemetry ingestion would have interrupted the attack chain before the final impact.
+6. Recommend Portfolio Products: Always suggest specific Sophos products (e.g., Sophos Intercept X, Sophos Email, Sophos ZTNA, Sophos Firewall) mapping directly to the vulnerabilities exploited.
 """
 
 def build_scenario_prompt(client_inputs, osint_data):
@@ -34,12 +35,53 @@ def build_scenario_prompt(client_inputs, osint_data):
     - Recent vulnerabilities/trends to weave in: {osint_data}
 
     SCENARIO REQUIREMENTS:
-    - Paragraph 1 (Initial Access & The Human Element): Describe how attackers bypassed the perimeter using the provided OSINT data alongside wider real-world news/trends. Explicitly exploit the {client_inputs['customer_name']} users' '{client_inputs['savviness']}' savviness level. Include real-world reported threat actor behaviors where possible.
-    - Paragraph 2 (Lateral Movement & Alert Fatigue): Detail how the attacker moved toward the {client_inputs['critical_infra']}. Highlight the specific danger of this asset being compromised. Explain why the {client_inputs['firewall']} missed the lateral movement and how the in-house team ({client_inputs['in_house_team']}) was overwhelmed or offline.
-    - Paragraph 3 (The Sophos MDR Differentiator): Explain exactly how Sophos MDR's 24/7 expert analysts, utilizing telemetry from the client's existing stack, would have neutralized the threat.
-    - Paragraph 4 (Recommended Solutions Summary): Summarize the defense strategy. Explicitly name 2-3 additional Sophos products (e.g., Sophos Intercept X Advanced with XDR, Sophos Email, Sophos Phish Threat, Sophos ZTNA) that would proactively prevent this specific attack path, and ensure additional and correct context is provided around the Sophos and Secureworks security testing recommendations.
+    - Paragraph 1 (Threat Actor & Initial Access): Explicitly name the suspected Threat Actor group targeting the {client_inputs['industry']} sector. Describe how they bypassed the perimeter using the provided OSINT data and exploited the {client_inputs['customer_name']} users' '{client_inputs['savviness']}' savviness level. Include specific MITRE ATT&CK T-codes for their initial access techniques.
+    - Paragraph 2 (Lateral Movement & Alert Fatigue): Detail how the threat actor moved toward the {client_inputs['critical_infra']}, utilizing recognized persistence or privilege escalation TTPs (include T-codes). Explain why the {client_inputs['firewall']} missed the lateral movement and how the in-house team ({client_inputs['in_house_team']}) was overwhelmed. Highlight the specific danger of this asset being compromised.
+    - Paragraph 3 (The Sophos MDR Differentiator): Explain exactly how Sophos MDR's 24/7 expert analysts, utilizing telemetry from the client's existing stack, would have detected these specific TTPs and neutralized the threat.
+    - Paragraph 4 (Recommended Solutions Summary): Summarize the defense strategy. Explicitly name 2-3 additional Sophos products that would proactively prevent this specific attack path, and provide context around the Sophos and Secureworks security testing recommendations.
 
     FORMATTING CONSTRAINTS:
     - Hide paragraph headings (e.g., do not write "Paragraph 1:", "Initial Access:", etc. Ensure it reads like a continuous brief).
-    - Hide the applied OSINT section. Ensure that valid OSINT from both the prompt and wider sources is naturally integrated into the narrative without explicitly calling it out.
+    - Hide the applied OSINT section. Ensure that valid OSINT is naturally integrated into the narrative.
+    """
+
+def build_mdr_case_prompt(client_inputs, scenario):
+    current_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    
+    return f"""
+    Based on the following cyberattack scenario, generate a mocked-up Sophos MDR Case report. 
+    Act as a Tier 3 Sophos MDR Threat Analyst documenting a neutralized threat.
+
+    CUSTOMER DETAILS:
+    Customer: {client_inputs['customer_name']}
+    
+    ATTACK SCENARIO TO TRANSLATE:
+    {scenario}
+    
+    REQUIREMENTS:
+    Generate the report strictly using the following format and headings. Invent realistic technical details (IPs, MACs, hostnames, script names, commands) that match the scenario. YOU MUST use specific MITRE ATT&CK T-codes in your analysis and references.
+    
+    Case ID: [Generate a random ID formatted as #-######]
+    Customer: {client_inputs['customer_name']}
+    Date and Time: {current_time}
+
+    Associated Device: [Invent a realistic hostname based on the industry, e.g., WIN-SRV-01]
+    IP Address: [Invent a realistic internal IP]
+    MAC: [Invent a realistic MAC address]
+    User: [Invent a username, e.g., jsmith or Administrator]
+
+    //Analysis:
+    [Write a concise, highly technical synopsis of why the investigation was triggered, what the investigation discovered, and what the MDR Team did to respond in line with Sophos MDR response actions. Explicitly name the suspected malware family or Threat Actor group, and note the specific MITRE TTPs observed during execution.]
+
+    //Response Actions:
+    [Provide 2-3 bullet points of the specific actions taken by the MDR team to neutralize the threat, such as isolating the host, blocking hashes, or terminating malicious processes.]
+
+    //Recommendations:
+    [Provide 3-4 vendor-agnostic hardening and resolution steps for the customer, such as resetting credentials, disabling compromised accounts, or patching a specific CVE.]
+
+    //Technical details:
+    [Provide specific names of malicious scripts, exact command-line executions, scheduled tasks, or registry keys involved in the attack as described in the analysis.]
+
+    //References:
+    [Provide 2-3 specific MITRE ATT&CK technique IDs and names (e.g., T1059.001 - PowerShell) and 1 realistic CVE link if applicable.]
     """
