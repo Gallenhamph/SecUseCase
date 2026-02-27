@@ -77,5 +77,5 @@ The application will automatically open in your default web browser at `http://l
 ## 💡 How It Works
 1. **Input:** The consultant enters the customer's engagement details (industry, user count, savviness, firewall vendor, physical locations, etc.) into the Streamlit sidebar.
 2. **OSINT Enrichment:** The app fetches simulated, relevant threat intelligence based on the declared perimeter technologies.
-3. **Generation:** Gemini 2.5 Pro processes the prompt, generating a 4-paragraph brief that details initial access, lateral movement, the Sophos MDR differentiator, and a proactive product/testing summary.
+3. **Generation:** Gemini 2.5 Flash processes the prompt, generating a 4-paragraph brief that details initial access, lateral movement, the Sophos MDR differentiator, and a proactive product/testing summary.
 4. **Export:** The consultant can instantly download the AI-generated scenario as a beautifully formatted PDF report or a PPTX deck to hand straight to the client.
