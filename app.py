@@ -64,7 +64,48 @@ class CyberScenarioGenerator:
             return f"⚠️ An error occurred while communicating with the Gemini API: {e}"
 
 # --- EXPORT LOGIC ---
+
+# 1. Custom PDF Class for Branding & Layout
+class ReportPDF(FPDF):
+    def header(self):
+        # Dark Blue Top Banner
+        self.set_fill_color(0, 32, 96)  # Corporate Dark Blue
+        self.rect(0, 0, 210, 20, 'F')   # A4 width is 210mm
+        
+        # Banner Text
+        self.set_y(6)
+        self.set_font('helvetica', 'B', 12)
+        self.set_text_color(255, 255, 255) # White text
+        self.cell(0, 10, 'Threat Modeling & MDR Assessment', align='R')
+        
+        # Reset Y position and color for the page body
+        self.set_y(25)
+        self.set_text_color(0, 0, 0)
+
+    def footer(self):
+        # Gray Footer with Page Numbers
+        self.set_y(-15)
+        self.set_font('helvetica', 'I', 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, f'Page {self.page_no()}', align='C')
+
+def draw_section_header(pdf, title):
+    """Draws a stylish section header with a colored bottom border."""
+    pdf.ln(5)
+    pdf.set_font("helvetica", "B", 14)
+    pdf.set_text_color(0, 32, 96) # Dark Blue
+    pdf.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
+    
+    # Draw horizontal line under title
+    pdf.set_draw_color(200, 200, 200) # Light Gray line
+    pdf.set_line_width(0.5)
+    pdf.line(pdf.get_x(), pdf.get_y(), 210 - 15, pdf.get_y()) # 15mm right margin
+    
+    pdf.ln(4)
+    pdf.set_text_color(0, 0, 0) # Reset to black text
+
 def clean_text(text):
+    """Strips Markdown and non-ASCII characters without breaking line structures."""
     if not text: return ""
     text = text.replace('\xa0', ' ').replace('\t', ' ')
     text = text.replace('**', '').replace('*', '').replace('#', '')
@@ -74,6 +115,8 @@ def clean_text(text):
     return text.strip()
 
 def write_safe_text(pdf, text):
+    """Bypasses FPDF word-wrap bugs using Python textwrap."""
+    pdf.set_font("helvetica", "", 10)
     paragraphs = text.split('\n')
     for paragraph in paragraphs:
         if paragraph.strip():
@@ -81,54 +124,59 @@ def write_safe_text(pdf, text):
             for line in lines:
                 pdf.cell(w=0, h=6, txt=line, new_x="LMARGIN", new_y="NEXT")
         else:
-            pdf.ln(4)
+            pdf.ln(3)
 
-def create_pdf(inputs, osint, scenario, recs):
-    pdf = FPDF()
+def create_pdf(inputs, scenario, recs):
+    # Initialize our new custom PDF class
+    pdf = ReportPDF()
     pdf.add_page()
     
-    # Title & Engagement Details
-    pdf.set_font("helvetica", "B", 16)
-    pdf.cell(w=0, h=10, txt="Cybersecurity Threat & Advisory Report", new_x="LMARGIN", new_y="NEXT", align="C")
+    # Title & Engagement Details (Centered, Large)
+    pdf.set_font("helvetica", "B", 18)
+    pdf.cell(w=0, h=12, txt="Cybersecurity Threat & Advisory Report", new_x="LMARGIN", new_y="NEXT", align="C")
+    
     pdf.set_font("helvetica", "I", 11)
-    pdf.cell(w=0, h=8, txt=f"Prepared for: {inputs['customer_name']} | By: {inputs['consultant_name']}", new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.ln(5)
+    pdf.set_text_color(100, 100, 100) # Gray
+    pdf.cell(w=0, h=6, txt=f"Prepared for: {inputs['customer_name']}", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.cell(w=0, h=6, txt=f"Presented by: {inputs['consultant_name']}", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_text_color(0, 0, 0) # Reset
+    pdf.ln(8)
     
-    # Section 1: Summary
-    pdf.set_font("helvetica", "B", 12)
-    pdf.cell(w=0, h=10, txt="Client Estate Summary", new_x="LMARGIN", new_y="NEXT")
+    # Section 1: Summary (using a light gray background box for flair)
+    draw_section_header(pdf, "Client Estate Summary")
+    pdf.set_fill_color(245, 245, 245) # Light gray box
     pdf.set_font("helvetica", "", 10)
-    summary_text = f"Industry: {inputs['industry']} | Users: {inputs['users']} | Endpoints: {inputs['endpoints']}\nFirewall: {inputs['firewall']} | In-House Team: {inputs['in_house_team']}"
-    write_safe_text(pdf, clean_text(summary_text))
-    pdf.ln(5)
     
-    # Section 2: OSINT
-    pdf.set_font("helvetica", "B", 12)
-    pdf.cell(w=0, h=10, txt="Applied Threat Intelligence (OSINT)", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("helvetica", "", 10)
-    write_safe_text(pdf, clean_text(osint))
-    pdf.ln(5)
+    summary_text = (
+        f"Industry: {inputs['industry']}   |   Users: {inputs['users']}   |   Endpoints: {inputs['endpoints']}\n"
+        f"Critical Infrastructure: {inputs['critical_infra']}\n"
+        f"Perimeter: {inputs['firewall']} Firewall   |   Internal Security: {inputs['in_house_team']}"
+    )
     
-    # Section 3: Scenario & Product Summary (Combined output from LLM)
-    pdf.set_font("helvetica", "B", 12)
-    pdf.cell(w=0, h=10, txt="Targeted Threat Narrative & Solutions Summary", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("helvetica", "", 10)
+    # We print the box manually line by line to keep it safe
+    for line in summary_text.split('\n'):
+        pdf.cell(w=0, h=7, txt=f"  {line}", new_x="LMARGIN", new_y="NEXT", fill=True)
+    
+    pdf.ln(6)
+    
+    # Section 2: The LLM Narrative (Notice OSINT is removed as requested)
+    draw_section_header(pdf, "Targeted Threat Narrative & Solutions Summary")
     write_safe_text(pdf, clean_text(scenario))
-    pdf.ln(5)
+    pdf.ln(6)
     
-    # Section 4: Advisory Recommendations
-    pdf.set_font("helvetica", "B", 12)
-    pdf.cell(w=0, h=10, txt="Recommended Advisory & Testing Services", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("helvetica", "", 10)
+    # Section 3: Advisory Recommendations
+    draw_section_header(pdf, "Recommended Security Testing & Advisory Services")
     for r in recs:
-        write_safe_text(pdf, clean_text(f"- {r}"))
+        # Adding a bit of visual flair to the bullet points
+        write_safe_text(pdf, clean_text(f"•  {r}"))
+        pdf.ln(1)
         
     return bytes(pdf.output())
 
-def create_pptx(inputs, osint, scenario, recs):
+def create_pptx(inputs, scenario, recs):
+    # Note: I removed the explicit OSINT block from the PPTX generator here too!
     prs = Presentation()
     
-    # Title Slide
     title_slide_layout = prs.slide_layouts[0]
     slide = prs.slides.add_slide(title_slide_layout)
     title = slide.shapes.title
@@ -136,7 +184,6 @@ def create_pptx(inputs, osint, scenario, recs):
     title.text = "Threat Modeling & MDR Assessment"
     subtitle.text = f"Prepared for: {inputs['customer_name']}\nPresented by: {inputs['consultant_name']}\n{inputs['industry']} Sector"
     
-    # Narrative Slide
     bullet_slide_layout = prs.slide_layouts[1]
     slide2 = prs.slides.add_slide(bullet_slide_layout)
     shapes2 = slide2.shapes
@@ -144,12 +191,9 @@ def create_pptx(inputs, osint, scenario, recs):
     body_shape2 = shapes2.placeholders[1]
     title_shape2.text = "Attack Scenario & Solutions"
     tf2 = body_shape2.text_frame
-    tf2.text = clean_text(osint)
     p = tf2.add_paragraph()
-    # Truncated slightly to fit on a slide, leaving the full summary for the PDF
-    p.text = clean_text(scenario[:450]) + "..." 
+    p.text = clean_text(scenario[:500]) + "..." 
     
-    # Recommendations Slide
     slide3 = prs.slides.add_slide(bullet_slide_layout)
     shapes3 = slide3.shapes
     title_shape3 = shapes3.title
@@ -232,24 +276,25 @@ if generate_btn:
     st.divider()
     
     if "⚠️ Error" not in scenario and "⚠️ An error" not in scenario:
-        pdf_bytes = create_pdf(client_inputs, osint_data, scenario, recs)
-        pptx_bytes = create_pptx(client_inputs, osint_data, scenario, recs)
-        
-        st.subheader("📥 Export Client Deliverables")
-        dl_col1, dl_col2 = st.columns(2)
-        
-        with dl_col1:
-            st.download_button(
-                label="📄 Download PDF Report",
-                data=pdf_bytes,
-                file_name=f"{customer_name.replace(' ', '_')}_MDR_Report.pdf",
-                mime="application/pdf"
-            )
+            # FIX: We now only pass 3 arguments: client_inputs, scenario, and recs
+            pdf_bytes = create_pdf(client_inputs, scenario, recs)
+            pptx_bytes = create_pptx(client_inputs, scenario, recs)
             
-        with dl_col2:
-            st.download_button(
-                label="📊 Download PowerPoint Deck",
-                data=pptx_bytes,
-                file_name=f"{customer_name.replace(' ', '_')}_MDR_Deck.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-            )
+            st.subheader("📥 Export Client Deliverables")
+            dl_col1, dl_col2 = st.columns(2)
+            
+            with dl_col1:
+                st.download_button(
+                    label="📄 Download PDF Report",
+                    data=pdf_bytes,
+                    file_name=f"{customer_name.replace(' ', '_')}_MDR_Report.pdf",
+                    mime="application/pdf"
+                )
+                
+            with dl_col2:
+                st.download_button(
+                    label="📊 Download PowerPoint Deck",
+                    data=pptx_bytes,
+                    file_name=f"{customer_name.replace(' ', '_')}_MDR_Deck.pptx",
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                )
