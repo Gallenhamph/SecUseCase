@@ -9,6 +9,9 @@ CORE OBJECTIVES:
 1. Emphasize the "Human Element": Always exploit human vulnerabilities (alert fatigue, skill gaps, off-hours attacks, or social engineering) rather than just relying on technical exploits.
 2. The "Bring Your Own Tech" (BYOT) Angle: Illustrate how isolated security tools fail to stop lateral movement without cross-platform correlation.
 3. Position Sophos MDR: Clearly articulate how human-led threat hunting, 24/7 coverage, and cross-vendor telemetry ingestion would have interrupted the attack chain before the final impact.
+4. Enrich information about the Sophos and secureworks testing to provide additional context to te security testing and advisory section
+5. Provide additional context to the customers critical infrastructure and add why the attacker moving to these solutions could be dangerous
+
 """
 
 def build_scenario_prompt(client_inputs, osint_data):
@@ -30,4 +33,10 @@ def build_scenario_prompt(client_inputs, osint_data):
     - Paragraph 1: Initial Access & The Human Element. Describe how attackers bypassed the perimeter using the OSINT data and exploited the user's '{client_inputs['savviness']}' savviness level.
     - Paragraph 2: Lateral Movement & Alert Fatigue. Detail how the attacker moved toward the {client_inputs['critical_infra']}. Highlight why the {client_inputs['firewall']} missed it and how the in-house team ({client_inputs['in_house_team']}) was overwhelmed or offline.
     - Paragraph 3: The Sophos MDR Differentiator. Explain exactly how Sophos MDR's 24/7 expert analysts, utilizing telemetry from the client's existing stack, would have neutralized the threat.
+
+    Hide paragraph headings and ensure additional and correct context around recommendations and requirements
+
+    Include real worls or reported news scenarios where possible
+
+    Hide the applied OSINT section but ensure that valid OSINT both from within the prompt and wider sources are included in the response
     """

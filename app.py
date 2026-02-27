@@ -1,7 +1,9 @@
 # app.py
 import streamlit as st
 import io
-import google.generativeai as genai
+import re
+import textwrap
+from google import genai
 from fpdf import FPDF
 from pptx import Presentation
 from prompts import SYSTEM_PERSONA, build_scenario_prompt
@@ -10,11 +12,11 @@ from prompts import SYSTEM_PERSONA, build_scenario_prompt
 class CyberScenarioGenerator:
     def __init__(self, api_key):
         self.api_key = api_key
+        # Initialize the new Google GenAI Client
         if self.api_key and self.api_key != "YOUR_API_KEY_HERE":
-            genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-2.5-flash')
+            self.client = genai.Client(api_key=self.api_key)
         else:
-            self.model = None
+            self.client = None
     
     def fetch_osint(self, vendor):
         simulated_osint = {
@@ -48,52 +50,91 @@ class CyberScenarioGenerator:
         return recs
 
     def call_llm(self, prompt):
-        if not self.model:
+        if not self.client:
             return "⚠️ Error: Please enter a valid Gemini API Key in the application code or via Streamlit secrets."
             
         full_prompt = f"{SYSTEM_PERSONA}\n\n{prompt}"
         
         try:
-            response = self.model.generate_content(full_prompt)
+            # Using the new models.generate_content format
+            response = self.client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=full_prompt
+            )
             return response.text
         except Exception as e:
             return f"⚠️ An error occurred while communicating with the Gemini API: {e}"
 
 # --- EXPORT LOGIC ---
+# --- EXPORT LOGIC ---
+def clean_text(text):
+    """Strips Markdown and non-ASCII characters without breaking line structures."""
+    if not text: return ""
+    text = text.replace('\xa0', ' ').replace('\t', ' ')
+    text = text.replace('**', '').replace('*', '').replace('#', '')
+    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
+    text = text.replace('–', '-').replace('—', '-')
+    text = text.encode('ascii', 'ignore').decode('ascii')
+    return text.strip()
+
+def write_safe_text(pdf, text):
+    """
+    Bypasses FPDF's fragile multi_cell word-wrap engine. 
+    Uses Python's native textwrap to forcefully slice text into lines of 95 chars.
+    """
+    paragraphs = text.split('\n')
+    for paragraph in paragraphs:
+        if paragraph.strip():
+            # Force wraps lines and cuts aggressively long strings (like URLs)
+            lines = textwrap.wrap(paragraph, width=95, break_long_words=True)
+            for line in lines:
+                # Print single lines natively - impossible to trigger horizontal space errors
+                pdf.cell(w=0, h=6, txt=line, new_x="LMARGIN", new_y="NEXT")
+        else:
+            # Maintain paragraph breaks naturally
+            pdf.ln(4)
+
 def create_pdf(inputs, osint, scenario, recs):
     pdf = FPDF()
     pdf.add_page()
+    
+    # Title
     pdf.set_font("helvetica", "B", 16)
-    pdf.cell(0, 10, "Cybersecurity Threat & Advisory Report", new_x="LMARGIN", new_y="NEXT", align="C")
-    
-    pdf.set_font("helvetica", "B", 12)
-    pdf.cell(0, 10, "Client Estate Summary", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("helvetica", "", 10)
-    pdf.multi_cell(0, 6, f"Industry: {inputs['industry']} | Users: {inputs['users']} | Endpoints: {inputs['endpoints']}\nFirewall: {inputs['firewall']} | In-House Team: {inputs['in_house_team']}")
-    
+    pdf.cell(w=0, h=10, txt="Cybersecurity Threat & Advisory Report", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(5)
+    
+    # Section 1: Summary
     pdf.set_font("helvetica", "B", 12)
-    pdf.cell(0, 10, "Applied Threat Intelligence (OSINT)", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(w=0, h=10, txt="Client Estate Summary", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("helvetica", "", 10)
-    pdf.multi_cell(0, 6, osint)
-    
+    summary_text = f"Industry: {inputs['industry']} | Users: {inputs['users']} | Endpoints: {inputs['endpoints']}\nFirewall: {inputs['firewall']} | In-House Team: {inputs['in_house_team']}"
+    write_safe_text(pdf, clean_text(summary_text))
     pdf.ln(5)
-    pdf.set_font("helvetica", "B", 12)
-    pdf.cell(0, 10, "Targeted Threat Narrative", new_x="LMARGIN", new_y="NEXT")
     
-    safe_scenario = scenario.encode('latin-1', 'replace').decode('latin-1')
+    # Section 2: OSINT
+    pdf.set_font("helvetica", "B", 12)
+    pdf.cell(w=0, h=10, txt="Applied Threat Intelligence (OSINT)", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("helvetica", "", 10)
-    pdf.multi_cell(0, 6, safe_scenario)
-    
+    write_safe_text(pdf, clean_text(osint))
     pdf.ln(5)
+    
+    # Section 3: Scenario
     pdf.set_font("helvetica", "B", 12)
-    pdf.cell(0, 10, "Recommended Advisory & Testing Services", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(w=0, h=10, txt="Targeted Threat Narrative", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "", 10)
+    write_safe_text(pdf, clean_text(scenario))
+    pdf.ln(5)
+    
+    # Section 4: Recommendations
+    pdf.set_font("helvetica", "B", 12)
+    pdf.cell(w=0, h=10, txt="Recommended Advisory & Testing Services", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("helvetica", "", 10)
     for r in recs:
-        safe_r = r.encode('latin-1', 'replace').decode('latin-1')
-        pdf.multi_cell(0, 6, f"- {safe_r}")
+        write_safe_text(pdf, clean_text(f"- {r}"))
         
     return bytes(pdf.output())
+
+# ... Keep create_pptx below exactly as it was!
 
 def create_pptx(inputs, osint, scenario, recs):
     prs = Presentation()
@@ -136,7 +177,6 @@ st.set_page_config(page_title="MDR & Testing Scenario Generator", page_icon="�
 st.title("🛡️ MDR & Offensive Security Scenario Generator")
 st.markdown("Generate highly tailored cyberattack scenarios and export to PDF/PPTX using Google Gemini Pro.")
 
-# Securely load the API key from Streamlit Secrets
 try:
     gemini_key = st.secrets["GEMINI_API_KEY"]
 except KeyError:
