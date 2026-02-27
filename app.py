@@ -12,7 +12,7 @@ class CyberScenarioGenerator:
         self.api_key = api_key
         if self.api_key and self.api_key != "YOUR_API_KEY_HERE":
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-pro')
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
         else:
             self.model = None
     
@@ -136,8 +136,14 @@ st.set_page_config(page_title="MDR & Testing Scenario Generator", page_icon="�
 st.title("🛡️ MDR & Offensive Security Scenario Generator")
 st.markdown("Generate highly tailored cyberattack scenarios and export to PDF/PPTX using Google Gemini Pro.")
 
-# Replace with your actual key, or preferably use Streamlit secrets management
-app_engine = CyberScenarioGenerator(api_key="YOUR_API_KEY_HERE")
+# Securely load the API key from Streamlit Secrets
+try:
+    gemini_key = st.secrets["GEMINI_API_KEY"]
+except KeyError:
+    st.error("Missing API Key! Please add GEMINI_API_KEY to your .streamlit/secrets.toml file.")
+    gemini_key = None
+
+app_engine = CyberScenarioGenerator(api_key=gemini_key)
 
 with st.sidebar:
     st.header("🏢 Client Estate Details")
