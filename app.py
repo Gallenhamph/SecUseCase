@@ -2,59 +2,46 @@
 import streamlit as st
 import io
 import re
-import textwrap
 import random
 from google import genai
 from fpdf import FPDF
 from pptx import Presentation
+from pptx.util import Pt
 from prompts import SYSTEM_PERSONA, build_scenario_prompt, build_mdr_case_prompt
 
 # --- BACKEND LOGIC ---
 class CyberScenarioGenerator:
     def __init__(self, api_key):
         self.api_key = api_key
-        # Initialize the Google GenAI Client
         if self.api_key and self.api_key != "YOUR_API_KEY_HERE":
             self.client = genai.Client(api_key=self.api_key)
         else:
             self.client = None
     
     def fetch_osint(self, vendor):
-        """Massive database of simulated, real-world threat intelligence mapping to specific vendors."""
         simulated_osint = {
-            # --- FIREWALLS ---
-            "Fortinet": "Active exploitation of FortiOS SSL-VPN vulnerabilities by state-sponsored actors to deploy custom implants and bypass pre-authentication filters.",
-            "Palo Alto": "Rising trend of threat actors exploiting unpatched PAN-OS GlobalProtect interfaces to achieve unauthenticated remote code execution and establish persistent reverse shells.",
-            "Cisco": "Exploitation of AnyConnect and IOS XE zero-days, leading to privilege escalation and the deployment of malicious Lua-based web shells on edge appliances.",
-            "Check Point": "Targeted attacks exploiting Check Point Security Gateway vulnerabilities to extract Active Directory hashes and establish persistent VPN sessions.",
-            "SonicWall": "Continued exploitation of SMA 100 series appliances using credential stuffing and unpatched firmware to deploy ransomware directly into the DMZ.",
-            "WatchGuard": "Historical targeting by botnets modifying firmware to maintain long-term, stealthy persistence on edge devices.",
-            "Barracuda": "Sophisticated threat actors exploiting Email Security Gateway (ESG) zero-days to deploy data exfiltration malware and backdoors.",
-            "Juniper": "Exploitation of Junos OS J-Web vulnerabilities allowing unauthenticated attackers to upload arbitrary files and execute code as root.",
-            
-            # --- ENDPOINTS ---
-            "CrowdStrike": "Advanced adversaries increasingly utilizing custom bootloaders and kernel-level drivers (BYOVD - Bring Your Own Vulnerable Driver) to blind Falcon sensors and bypass user-mode hooking.",
+            "Fortinet": "Active exploitation of FortiOS SSL-VPN vulnerabilities (e.g., CVE-2023-27997, CVE-2024-21762) by state-sponsored actors to deploy custom implants and bypass pre-authentication filters.",
+            "Palo Alto": "Rising trend of threat actors exploiting unpatched PAN-OS GlobalProtect interfaces (e.g., CVE-2024-3400) to achieve unauthenticated remote code execution and establish persistent reverse shells.",
+            "Cisco": "Exploitation of AnyConnect and IOS XE zero-days (e.g., CVE-2023-20198), leading to privilege escalation and the deployment of malicious Lua-based web shells on edge appliances.",
+            "Check Point": "Targeted attacks exploiting Check Point Security Gateway vulnerabilities (e.g., CVE-2024-24919) to extract Active Directory hashes and establish persistent VPN sessions.",
+            "SonicWall": "Continued exploitation of SMA 100 series appliances (e.g., CVE-2021-20038) using credential stuffing and unpatched firmware to deploy ransomware directly into the DMZ.",
+            "WatchGuard": "Historical targeting by botnets exploiting unpatched privilege escalation flaws (e.g., CVE-2022-26318) to maintain long-term, stealthy persistence on edge devices.",
+            "Barracuda": "Sophisticated threat actors exploiting Email Security Gateway (ESG) zero-days (e.g., CVE-2023-2868) to deploy data exfiltration malware and backdoors.",
+            "Juniper": "Exploitation of Junos OS J-Web vulnerabilities (e.g., CVE-2023-36844) allowing unauthenticated attackers to upload arbitrary files and execute code as root.",
+            "CrowdStrike": "Advanced adversaries increasingly utilizing custom bootloaders and kernel-level drivers (BYOVD - Bring Your Own Vulnerable Driver) to blind Falcon sensors (Reference: Elastic Security Labs BYOVD research).",
             "Microsoft Defender": "High reliance on 'Living off the Land' (LotL) techniques and obfuscated PowerShell scripts to evade standard Defender ASR rules and execute fileless malware.",
             "SentinelOne": "Threat actors utilizing highly obfuscated, fragmented shellcode and direct syscalls to evade SentinelOne's behavioral AI engines.",
-            "Trend Micro": "Exploitation of legacy Apex One vulnerabilities and exploitation of exclusion lists to deploy ransomware payloads undetected.",
+            "Trend Micro": "Exploitation of legacy Apex One vulnerabilities (e.g., CVE-2022-40139) and exploitation of exclusion lists to deploy ransomware payloads undetected.",
             "Symantec": "Bypass of legacy signature-based protections using polymorphic malware families and living-off-the-land binaries (LOLBins).",
-            
-            # --- IDENTITY ---
-            "Okta": "Surge in highly sophisticated Adversary-in-the-Middle (AiTM) phishing kits (e.g., Evilginx2) capturing Okta session cookies and bypassing multi-factor authentication entirely.",
+            "Okta": "Surge in highly sophisticated Adversary-in-the-Middle (AiTM) phishing kits capturing Okta session cookies and bypassing multi-factor authentication entirely (Reference: CISA Advisory AA23-320A).",
             "Microsoft Entra ID (Azure AD)": "Widespread MFA fatigue (push bombing) attacks and illicit consent grants involving malicious OAuth applications to maintain persistent access to Microsoft 365 environments.",
             "Cisco Duo": "Targeting of telephony-based authentication (SMS/Voice) via SIM swapping, alongside localized push-notification fatigue campaigns.",
-            
-            # --- EMAIL ---
-            "Mimecast": "Massive increase in Quishing (QR Code Phishing) and HTML smuggling campaigns that successfully bypass Mimecast's URL rewriting and attachment sandboxing.",
+            "Mimecast": "Massive increase in Quishing (QR Code Phishing) and HTML smuggling campaigns that successfully bypass Mimecast's URL rewriting and attachment sandboxing (Reference: IBM X-Force Quishing Trends).",
             "Proofpoint": "Threat actors leveraging highly customized, evasive PDF documents containing embedded malicious links that bypass TAP (Targeted Attack Protection) analysis.",
-            
-            # --- CLOUD ---
             "AWS": "Exploitation of overly permissive IAM roles via SSRF vulnerabilities on public-facing EC2 instances, leading to environment-wide administrative compromise.",
             "Microsoft Azure": "Abuse of Azure Automation Runbooks and extraction of Managed Identity tokens to pivot laterally across the Azure environment.",
             "GCP": "Targeting of exposed service account keys embedded in developer repositories to access Google Cloud Storage buckets and BigQuery datasets."
         }
-        
-        # If the vendor isn't in the list (e.g. "Other" or "Sophos" which we protect), return a safe generic string
         return simulated_osint.get(vendor, "")
 
     def generate_recommendations(self, inputs):
@@ -63,54 +50,56 @@ class CyberScenarioGenerator:
         recs.append("🛡️ **SECURITY ASSESSMENTS & ADVISORY**")
         
         if inputs['in_house_team'] == "Yes (24/7)" and inputs['savviness'] in ["Medium", "High"]:
-             recs.append("• Secureworks Adversary Exercises (Red Teaming): Emulate a sophisticated adversary to stress-test your mature 24/7 SOC and validate detection capabilities across the kill chain.")
-             recs.append("• Secureworks Threat Hunting Assessment: Proactively search your environment for undetected threats or persistence mechanisms that may have bypassed your existing defenses.")
+             recs.append("• [Secureworks Adversary Exercises (Red Teaming)](https://www.secureworks.com/services/offensive-security): Emulate a sophisticated adversary to stress-test your mature 24/7 SOC and validate detection capabilities across the kill chain.")
+             recs.append("• [Secureworks Threat Hunting Assessment](https://www.secureworks.com/services/threat-hunting): Proactively search your environment for undetected threats or persistence mechanisms that may have bypassed your existing defenses.")
         elif inputs['in_house_team'] != "No":
-             recs.append("• Sophos Internal Penetration Testing: Simulate an attacker who has bypassed the perimeter to test domain compromise, internal lateral movement, and existing defenses.")
-             recs.append("• Secureworks Tabletop Exercises: Ensure leadership and the internal security team are aligned on communication, legal, and operational procedures during a crisis.")
+             recs.append("• [Sophos Internal Penetration Testing](https://www.sophos.com/en-us/services/penetration-testing): Simulate an attacker who has bypassed the perimeter to test domain compromise, internal lateral movement, and existing defenses.")
+             recs.append("• [Secureworks Tabletop Exercises](https://www.secureworks.com/services/incident-response-readiness): Ensure leadership and the internal security team are aligned on communication, legal, and operational procedures during a crisis.")
         else:
-            recs.append("• Sophos Emergency Incident Response Retainer: Crucial for organizations without dedicated internal IR teams to guarantee SLAs and immediate assistance during a live breach.")
-            recs.append("• Secureworks Ransomware Readiness Assessment: Evaluate your organization's preparedness to defend against, endure, and recover from a targeted ransomware event.")
+            recs.append("• [Sophos Emergency Incident Response Retainer](https://www.sophos.com/en-us/services/incident-response-retainer): Crucial for organizations without dedicated internal IR teams to guarantee SLAs and immediate assistance during a live breach.")
+            recs.append("• [Secureworks Ransomware Readiness Assessment](https://www.secureworks.com/services/incident-response-readiness): Evaluate your organization's preparedness to defend against, endure, and recover from a targeted ransomware event.")
 
         if inputs['public_web_apps']:
-            recs.append("• Sophos Web Application Security Assessment: Identify coding flaws (e.g., SQLi, XSS) in your public-facing web applications before attackers exploit them to access backend databases.")
-            recs.append("• Sophos External Penetration Testing: Manual, tester-driven attempts to breach your internet-facing assets, moving beyond automated vulnerability scanning.")
+            recs.append("• [Sophos Web Application Security Assessment](https://www.sophos.com/en-us/services/penetration-testing): Identify coding flaws (e.g., SQLi, XSS) in your public-facing web applications before attackers exploit them to access backend databases.")
+            recs.append("• [Sophos External Penetration Testing](https://www.sophos.com/en-us/services/penetration-testing): Manual, tester-driven attempts to breach your internet-facing assets, moving beyond automated vulnerability scanning.")
 
         if inputs['physical_locations'] > 1:
-             recs.append("• Sophos Wireless Network Penetration Testing: Evaluate wireless security across your physical locations, testing for rogue access points and weak encryption.")
+             recs.append("• [Sophos Wireless Network Penetration Testing](https://www.sophos.com/en-us/services/penetration-testing): Evaluate wireless security across your physical locations, testing for rogue access points and weak encryption.")
 
         if "Cloud" in inputs['cloud_env'] or inputs['cloud_env'] in ["AWS", "Microsoft Azure", "GCP"]:
-            recs.append(f"• Sophos Cloud Security Assessment: Audit your {inputs['cloud_env']} environment for misconfigurations, overly permissive IAM roles, and compliance violations.")
+            recs.append(f"• [Sophos Cloud Security Assessment](https://www.sophos.com/en-us/services/cloud-security-posture-management): Audit your {inputs['cloud_env']} environment for misconfigurations, overly permissive IAM roles, and compliance violations.")
 
         if inputs['savviness'] == "Low":
-            recs.append("• Sophos Social Engineering Simulation: Conduct targeted phishing and social engineering exercises to baseline and improve employee security awareness.")
+            recs.append("• [Sophos Phish Threat (Social Engineering Simulation)](https://www.sophos.com/en-us/products/phish-threat): Conduct targeted phishing and social engineering exercises to baseline and improve employee security awareness.")
 
         if "Active Directory" in inputs['identity'] or "Entra ID" in inputs['identity']:
-             recs.append("• Sophos Active Directory Security Assessment: Identify architectural weaknesses, excessive privileges, and misconfigurations in your core identity platform.")
+             recs.append("• [Sophos Active Directory Security Assessment](https://www.sophos.com/en-us/services/compromise-assessment): Identify architectural weaknesses, excessive privileges, and misconfigurations in your core identity platform.")
 
         if inputs['servers'] > 50:
-            recs.append("• Sophos Compromise Assessment: Proactively hunt for existing persistence mechanisms or dormant threats currently hiding in your data center.")
+            recs.append("• [Sophos Compromise Assessment](https://www.sophos.com/en-us/services/compromise-assessment): Proactively hunt for existing persistence mechanisms or dormant threats currently hiding in your data center.")
 
         recs.append("\n⚙️ **RECOMMENDED SOPHOS SOLUTIONS**")
         
-        recs.append("• Sophos Managed Risk: Implement continuous external attack surface management to discover and prioritize exposed vulnerabilities across your evolving tech stack before they can be weaponized.")
+        if inputs['m365_license'] != "None / On-Prem Only":
+            recs.append(f"• [Sophos MDR for Microsoft 365](https://www.sophos.com/en-us/products/mdr): Maximize your {inputs['m365_license']} investment. Sophos ingests telemetry directly from Microsoft Graph Security, Entra ID, and Defender to correlate Microsoft alerts with cross-domain threat intelligence, stopping attacks that bypass native Microsoft controls.")
+
+        recs.append("• [Sophos Managed Risk](https://www.sophos.com/en-us/products/managed-risk): Implement continuous external attack surface management to discover and prioritize exposed vulnerabilities across your evolving tech stack before they can be weaponized.")
 
         if inputs['identity'] not in ["None / Local Only", "On-Prem Active Directory"]:
-            recs.append(f"• Sophos ITDR (Identity Threat Detection and Response): Integrate telemetry directly from {inputs['identity']} to detect compromised credentials, anomalous logins, and lateral movement tied to user identities before endpoints are even touched.")
+            recs.append(f"• [Sophos ITDR (Identity Threat Detection and Response)](https://www.sophos.com/en-us/products/mdr): Integrate telemetry directly from {inputs['identity']} to detect compromised credentials, anomalous logins, and lateral movement tied to user identities before endpoints are even touched.")
 
         if inputs['firewall'] != "Sophos" or inputs['servers'] > 20:
-            recs.append("• Sophos NDR (Network Detection and Response): Analyze network traffic for rogue devices, unprotected assets, and insider threats. This is critical for monitoring lateral movement across the network in a 'Bring Your Own Tech' environment.")
+            recs.append("• [Sophos NDR (Network Detection and Response)](https://www.sophos.com/en-us/products/network-detection-and-response): Analyze network traffic for rogue devices, unprotected assets, and insider threats. This is critical for monitoring lateral movement across the network in a 'Bring Your Own Tech' environment.")
 
         if inputs['endpoint'] != "Sophos":
-             recs.append(f"• Sophos Intercept X Advanced with XDR: Consolidate your endpoint stack by replacing {inputs['endpoint']}. This provides Sophos MDR analysts with native, deep-level remediation capabilities rather than just third-party telemetry.")
+             recs.append(f"• [Sophos Intercept X Advanced with XDR](https://www.sophos.com/en-us/products/endpoint-antivirus): Consolidate your endpoint stack by replacing {inputs['endpoint']}. This provides Sophos MDR analysts with native, deep-level remediation capabilities rather than just third-party telemetry.")
              
         if inputs['email'] != "Sophos":
-             recs.append(f"• Sophos Email Security: Integrate advanced phishing protection and post-delivery remediation natively into your MDR ecosystem, reducing the risk of social engineering attacks that bypass {inputs['email']}.")
+             recs.append(f"• [Sophos Email Security](https://www.sophos.com/en-us/products/email-security): Integrate advanced phishing protection and post-delivery remediation natively into your MDR ecosystem, reducing the risk of social engineering attacks that bypass {inputs['email']}.")
 
         return recs
 
     def call_llm(self, prompt):
-        """Calls the Gemini API using gemini-2.5-flash"""
         if not self.client:
             return "⚠️ Error: Please enter a valid Gemini API Key in the application code or via Streamlit secrets."
             
@@ -157,6 +146,9 @@ def draw_section_header(pdf, title):
 def clean_text(text):
     if not text: return ""
     text = text.replace('\xa0', ' ').replace('\t', ' ')
+    
+    text = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'\1 (\2)', text)
+    
     text = text.replace('**', '').replace('*', '').replace('#', '')
     text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
     text = text.replace('–', '-').replace('—', '-')
@@ -168,16 +160,15 @@ def write_safe_text(pdf, text, font_family="helvetica"):
     paragraphs = text.split('\n')
     for paragraph in paragraphs:
         if paragraph.strip():
-            lines = textwrap.wrap(paragraph, width=95, break_long_words=True)
-            for line in lines:
-                pdf.cell(w=0, h=6, txt=line, new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(w=0, h=6, txt=paragraph, align="L")
+            pdf.ln(2) 
         else:
-            pdf.ln(3)
+            pdf.ln(2)
 
 def draw_visual_timeline(pdf, timeline_text):
     if not timeline_text: return
     
-    draw_section_header(pdf, "Attack Timeline & MDR Intervention")
+    draw_section_header(pdf, "Attack Timeline & Early MDR Intervention")
     entries = timeline_text.strip().split('\n')
     
     x_node = 20
@@ -204,11 +195,10 @@ def draw_visual_timeline(pdf, timeline_text):
         
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("helvetica", "", 10)
-        wrapped_event = textwrap.wrap(clean_text(event.strip()), width=85, break_long_words=True)
+        pdf.set_x(x_text)
         
-        for line in wrapped_event:
-            pdf.set_x(x_text)
-            pdf.cell(w=0, h=5, txt=line, new_x="LMARGIN", new_y="NEXT")
+        usable_width = 210 - x_text - 15 
+        pdf.multi_cell(w=usable_width, h=5, txt=clean_text(event.strip()), align="L")
             
         end_y = pdf.get_y()
         
@@ -248,9 +238,10 @@ def create_pdf(inputs, scenario, recs, mdr_case):
     summary_text = (
         f"Industry: {inputs['industry']}   |   Users: {inputs['users']}   |   Endpoints: {inputs['endpoints']}\n"
         f"Critical Infrastructure: {inputs['critical_infra']}\n"
+        f"M365 License: {inputs['m365_license']}   |   Cloud: {inputs['cloud_env']}\n"
         f"Endpoint: {inputs['endpoint']}   |   Email: {inputs['email']}\n"
         f"Perimeter: {inputs['firewall']} Firewall   |   Identity: {inputs['identity']}\n"
-        f"Internal Security: {inputs['in_house_team']}   |   Cloud: {inputs['cloud_env']}"
+        f"Internal Security: {inputs['in_house_team']}"
     )
     
     for line in summary_text.split('\n'):
@@ -274,11 +265,7 @@ def create_pdf(inputs, scenario, recs, mdr_case):
     
     clean_mdr = clean_text(mdr_case)
     for line in clean_mdr.split('\n'):
-        wrapped_lines = textwrap.wrap(line, width=85, break_long_words=True)
-        if not wrapped_lines:
-            pdf.cell(w=0, h=5, txt="", new_x="LMARGIN", new_y="NEXT", fill=True)
-        for w_line in wrapped_lines:
-            pdf.cell(w=0, h=5, txt=f" {w_line}", new_x="LMARGIN", new_y="NEXT", fill=True)
+        pdf.multi_cell(w=0, h=5, txt=f" {line}", align="L", fill=True)
             
     pdf.ln(6)
     
@@ -287,10 +274,10 @@ def create_pdf(inputs, scenario, recs, mdr_case):
         if r.startswith("🛡️") or r.startswith("⚙️"):
             pdf.ln(3)
             write_safe_text(pdf, clean_text(r))
-            pdf.ln(1)
         else:
-            write_safe_text(pdf, clean_text(r))
-            pdf.ln(1)
+            pdf.set_x(15)
+            pdf.multi_cell(w=0, h=6, txt=clean_text(r), align="L")
+            pdf.ln(2)
         
     return bytes(pdf.output())
 
@@ -313,36 +300,54 @@ def create_pptx(inputs, scenario, recs, mdr_case):
     title_shape2 = shapes2.title
     body_shape2 = shapes2.placeholders[1]
     title_shape2.text = "Attack Scenario & Solutions"
+    
     tf2 = body_shape2.text_frame
-    p = tf2.add_paragraph()
-    p.text = clean_text(scenario_clean[:500]) + "..." 
+    tf2.word_wrap = True 
+    p = tf2.paragraphs[0]
+    p.text = clean_text(scenario_clean[:800]) + "..." 
+    p.font.size = Pt(14) 
     
     slide3 = prs.slides.add_slide(bullet_slide_layout)
     shapes3 = slide3.shapes
     title_shape3 = shapes3.title
     body_shape3 = shapes3.placeholders[1]
     title_shape3.text = "Simulated MDR Investigation"
+    
     tf3 = body_shape3.text_frame
+    tf3.word_wrap = True
     
     analysis_match = re.search(r'//Analysis:(.*?)//Response Actions:', mdr_case, re.DOTALL)
     if analysis_match:
         analysis_text = clean_text(analysis_match.group(1).strip())
     else:
-        analysis_text = clean_text(mdr_case[:300]) + "..."
+        analysis_text = clean_text(mdr_case[:500]) + "..."
         
-    p2 = tf3.add_paragraph()
+    p2 = tf3.paragraphs[0]
     p2.text = analysis_text
+    p2.font.size = Pt(14)
     
     slide4 = prs.slides.add_slide(bullet_slide_layout)
     shapes4 = slide4.shapes
     title_shape4 = shapes4.title
     body_shape4 = shapes4.placeholders[1]
     title_shape4.text = "Testing & Advisory Recommendations"
+    
     tf4 = body_shape4.text_frame
+    tf4.word_wrap = True
+    tf4.clear() 
+    
     for r in recs:
         p4 = tf4.add_paragraph()
-        p4.text = clean_text(r)
-        
+        if r.startswith("🛡️") or r.startswith("⚙️"):
+            p4.text = clean_text(r)
+            p4.font.bold = True
+            p4.font.size = Pt(16)
+            p4.level = 0
+        else:
+            p4.text = clean_text(r).lstrip('•').strip()
+            p4.font.size = Pt(12)
+            p4.level = 1
+            
     pptx_stream = io.BytesIO()
     prs.save(pptx_stream)
     return pptx_stream.getvalue()
@@ -382,12 +387,16 @@ with st.sidebar:
     endpoint = st.selectbox("Endpoint Security", ["Sophos", "Microsoft Defender", "CrowdStrike", "SentinelOne", "Trend Micro", "Symantec", "Trellix", "Blackberry Cylance", "Other"])
     firewall = st.selectbox("Firewall Vendor", ["Fortinet", "Palo Alto", "Cisco", "Check Point", "SonicWall", "WatchGuard", "Juniper", "Barracuda", "Forcepoint", "Sophos", "Other"])
     identity = st.selectbox("Identity Provider", ["Microsoft Entra ID (Azure AD)", "Okta", "Cisco Duo", "Ping Identity", "On-Prem Active Directory", "None / Local Only"])
+    m365_license = st.selectbox("Microsoft 365 Licensing", ["None / On-Prem Only", "M365 Business Basic/Standard", "M365 Business Premium", "Office 365 E3 / M365 E3", "Microsoft 365 E5"])
     email = st.selectbox("Email Security", ["Sophos", "Microsoft Defender for Office 365", "Mimecast", "Proofpoint", "Barracuda", "Other"])
     cloud_env = st.selectbox("Cloud Infrastructure", ["AWS", "Microsoft Azure", "GCP", "Multi-Cloud", "None (Fully On-Prem)"])
 
     st.subheader("🎯 Additional Attack Surfaces")
     physical_locations = st.number_input("Number of Physical Offices/Locations", min_value=1, value=3)
     public_web_apps = st.checkbox("Host Public-Facing Web Applications?")
+    
+    st.subheader("🛠️ Custom Scenario Override")
+    custom_scenario = st.text_area("Specific Threat/Use Case (Optional)", placeholder="e.g., 'How would Sophos MDR detect a BlackBasta ransomware deployment via a compromised VPN?' Leave blank for a random scenario.")
 
     generate_btn = st.button("Generate Full Scenario", type="primary")
 
@@ -396,7 +405,7 @@ if generate_btn:
         "customer_name": customer_name, "consultant_name": consultant_name,
         "industry": industry, "users": users, "savviness": savviness, 
         "endpoints": endpoints, "servers": servers, "critical_infra": critical_infra,
-        "endpoint": endpoint, "firewall": firewall, "identity": identity, "email": email, "cloud_env": cloud_env,
+        "endpoint": endpoint, "firewall": firewall, "identity": identity, "m365_license": m365_license, "email": email, "cloud_env": cloud_env,
         "in_house_team": in_house_team, "physical_locations": physical_locations, "public_web_apps": public_web_apps
     }
     
@@ -421,7 +430,6 @@ if generate_btn:
     selected_vector = random.choice(attack_vectors)
     
     with st.spinner("Analyzing estate and generating narrative with Gemini 2.5 Flash..."):
-        # Combine OSINT across ALL selected stack components for a massively enriched prompt
         osint_list = [
             app_engine.fetch_osint(endpoint),
             app_engine.fetch_osint(firewall),
@@ -429,10 +437,9 @@ if generate_btn:
             app_engine.fetch_osint(email),
             app_engine.fetch_osint(cloud_env)
         ]
-        # Filter out empty strings and join with spaces
         osint_data = " ".join([x for x in osint_list if x])
         
-        narrative_prompt = build_scenario_prompt(client_inputs, osint_data, selected_vector)
+        narrative_prompt = build_scenario_prompt(client_inputs, osint_data, selected_vector, custom_scenario)
         scenario = app_engine.call_llm(narrative_prompt)
         
         case_prompt = build_mdr_case_prompt(client_inputs, scenario)
@@ -454,7 +461,7 @@ if generate_btn:
     with tab2:
         st.subheader("Simulated MDR Investigation")
         st.info("This output mimics the Case Details view a customer would receive in Sophos Central.")
-        st.code(mdr_case, language="markdown")
+        st.write(mdr_case)
         
     with tab3:
         st.subheader("Recommended Security Testing & Advisory")
