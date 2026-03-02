@@ -147,31 +147,28 @@ def draw_section_header(pdf, title):
 def clean_text(text):
     if not text: return ""
     text = text.replace('\xa0', ' ').replace('\t', ' ')
+    
+    text = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'\1 (\2)', text)
+    
+    text = text.replace('**', '').replace('*', '').replace('#', '')
     text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
     text = text.replace('–', '-').replace('—', '-')
-    text = text.replace('### ', '').replace('## ', '').replace('# ', '') # Strip markdown headers
+    text = text.replace('### ', '').replace('## ', '').replace('# ', '') 
     text = text.encode('ascii', 'ignore').decode('ascii')
     return text.strip()
 
 def clean_pptx_text(text):
-    """Specific cleaner for PPTX to remove all Markdown syntaxes."""
     text = clean_text(text)
-    # Convert [Text](URL) into "Text: URL" for presentation slides
     text = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'\1: \2', text)
-    # Strip asterisks used for bold/italics
     text = text.replace('**', '').replace('*', '')
     return text.strip()
 
 def robust_multi_cell(pdf, w, h, txt, align="L", fill=False):
-    """A bulletproof wrapper that falls back to textwrap if FPDF crashes on long URLs/strings."""
     try:
-        # We attempt to natively render [Link](URL) and **bold** using FPDF's markdown parser
-        # By doing this, FPDF hides the massive URLs behind short text, preventing width crashes.
         pdf.multi_cell(w=w, h=h, txt=txt, align=align, markdown=True, fill=fill)
     except Exception:
-        # FAILSAFE: If FPDF fails (usually FPDFException from width error), we manually strip the URL entirely and wrap safely
         safe_txt = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'\1', txt).replace('**', '').replace('*', '')
-        wrap_width = 90 if w == 0 else int(w / 1.8) # Approximate max chars based on cell width
+        wrap_width = 90 if w == 0 else int(w / 1.8) 
         lines = textwrap.wrap(safe_txt, width=wrap_width)
         for line in lines:
             pdf.cell(w=w, h=h, txt=line, align=align, fill=fill, new_x="LMARGIN", new_y="NEXT")
@@ -308,7 +305,6 @@ def create_pptx(inputs, scenario, recs, mdr_case):
 
     prs = Presentation()
     
-    # Slide 1: Title
     title_slide_layout = prs.slide_layouts[0]
     slide = prs.slides.add_slide(title_slide_layout)
     title = slide.shapes.title
@@ -316,10 +312,8 @@ def create_pptx(inputs, scenario, recs, mdr_case):
     title.text = "Threat Modeling & MDR Assessment"
     subtitle.text = f"Prepared for: {inputs['customer_name']}\nPresented by: {inputs['consultant_name']}\n{inputs['industry']} Sector"
     
-    # Split Narrative into paragraphs for pagination
     paragraphs = [p for p in scenario_clean.split('\n') if p.strip()]
     
-    # Slide 2: Narrative Phase 1
     bullet_slide_layout = prs.slide_layouts[1]
     slide2 = prs.slides.add_slide(bullet_slide_layout)
     slide2.shapes.title.text = "Attack Narrative - Phase 1"
@@ -333,7 +327,6 @@ def create_pptx(inputs, scenario, recs, mdr_case):
         p.font.size = Pt(14) 
         p.space_after = Pt(10)
         
-    # Slide 3: Narrative Phase 2
     slide3 = prs.slides.add_slide(bullet_slide_layout)
     slide3.shapes.title.text = "Attack Narrative - Phase 2"
     tf3 = slide3.shapes.placeholders[1].text_frame
@@ -346,7 +339,6 @@ def create_pptx(inputs, scenario, recs, mdr_case):
         p.font.size = Pt(14) 
         p.space_after = Pt(10)
     
-    # Slide 4: MDR Investigation
     slide4 = prs.slides.add_slide(bullet_slide_layout)
     slide4.shapes.title.text = "Simulated MDR Investigation"
     tf4 = slide4.shapes.placeholders[1].text_frame
@@ -362,7 +354,6 @@ def create_pptx(inputs, scenario, recs, mdr_case):
     p4.text = analysis_text
     p4.font.size = Pt(14)
     
-    # Slide 5: Recommendations
     slide5 = prs.slides.add_slide(bullet_slide_layout)
     slide5.shapes.title.text = "Testing & Advisory Recommendations"
     tf5 = slide5.shapes.placeholders[1].text_frame
@@ -434,6 +425,7 @@ with st.sidebar:
 
     generate_btn = st.button("Generate Full Scenario", type="primary")
 
+# --- SESSION STATE GENERATION ---
 if generate_btn:
     client_inputs = {
         "customer_name": customer_name, "consultant_name": consultant_name,
@@ -442,6 +434,10 @@ if generate_btn:
         "endpoint": endpoint, "firewall": firewall, "identity": identity, "m365_license": m365_license, "email": email, "cloud_env": cloud_env,
         "in_house_team": in_house_team, "physical_locations": physical_locations, "public_web_apps": public_web_apps
     }
+    
+    # Store dynamic inputs in session state so file names match the generated output
+    st.session_state['client_inputs'] = client_inputs
+    st.session_state['customer_name'] = customer_name
     
     attack_vectors = [
         "Highly targeted spear-phishing campaign using a malicious PDF attachment (T1566.001)",
@@ -481,7 +477,28 @@ if generate_btn:
         
         recs = app_engine.generate_recommendations(client_inputs)
         
+        # Save results to session state
+        st.session_state['scenario'] = scenario
+        st.session_state['mdr_case'] = mdr_case
+        st.session_state['recs'] = recs
+        
+        # Pre-generate bytes for persistence
+        if "⚠️ Error" not in scenario and "⚠️ An error" not in scenario:
+            st.session_state['pdf_bytes'] = create_pdf(client_inputs, scenario, recs, mdr_case)
+            st.session_state['pptx_bytes'] = create_pptx(client_inputs, scenario, recs, mdr_case)
+        else:
+            st.session_state['pdf_bytes'] = None
+            st.session_state['pptx_bytes'] = None
+            
     st.success("Analysis Complete!")
+
+# --- UI RENDERING FROM SESSION STATE ---
+if 'scenario' in st.session_state:
+    # Retrieve from cache
+    scenario = st.session_state['scenario']
+    mdr_case = st.session_state['mdr_case']
+    recs = st.session_state['recs']
+    cached_customer_name = st.session_state['customer_name']
     
     ui_scenario = re.sub(r'\[TIMELINE_START\]', '\n#### Attack Timeline\n', scenario)
     ui_scenario = re.sub(r'\[TIMELINE_END\]', '', ui_scenario)
@@ -489,7 +506,7 @@ if generate_btn:
     tab1, tab2, tab3 = st.tabs(["📝 Threat Narrative", "🛡️ Sophos Central MDR Log", "🎯 Recommendations"])
     
     with tab1:
-        st.subheader(f"Threat Narrative & Solutions for {customer_name}")
+        st.subheader(f"Threat Narrative & Solutions for {cached_customer_name}")
         st.write(ui_scenario)
         
     with tab2:
@@ -507,25 +524,22 @@ if generate_btn:
         
     st.divider()
     
-    if "⚠️ Error" not in scenario and "⚠️ An error" not in scenario:
-        pdf_bytes = create_pdf(client_inputs, scenario, recs, mdr_case)
-        pptx_bytes = create_pptx(client_inputs, scenario, recs, mdr_case)
-        
+    if st.session_state.get('pdf_bytes') and st.session_state.get('pptx_bytes'):
         st.subheader("📥 Export Client Deliverables")
         dl_col1, dl_col2 = st.columns(2)
         
         with dl_col1:
             st.download_button(
                 label="📄 Download PDF Report",
-                data=pdf_bytes,
-                file_name=f"{customer_name.replace(' ', '_')}_MDR_Report.pdf",
+                data=st.session_state['pdf_bytes'],
+                file_name=f"{cached_customer_name.replace(' ', '_')}_MDR_Report.pdf",
                 mime="application/pdf"
             )
             
         with dl_col2:
             st.download_button(
                 label="📊 Download PowerPoint Deck",
-                data=pptx_bytes,
-                file_name=f"{customer_name.replace(' ', '_')}_MDR_Deck.pptx",
+                data=st.session_state['pptx_bytes'],
+                file_name=f"{cached_customer_name.replace(' ', '_')}_MDR_Deck.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
             )
