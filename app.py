@@ -1,17 +1,11 @@
 # app.py
 import streamlit as st
-import io
 import re
 import random
-import textwrap
 from google import genai
-from fpdf import FPDF
-from pptx import Presentation
-from pptx.util import Pt, Inches
-from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_SHAPE
-from pptx.enum.shapes import MSO_CONNECTOR
+from data import ATTACK_VECTORS, SIMULATED_OSINT
 from prompts import SYSTEM_PERSONA, build_scenario_prompt, build_mdr_case_prompt
+from export import create_pdf, create_pptx
 
 # --- BACKEND LOGIC ---
 class CyberScenarioGenerator:
@@ -23,137 +17,11 @@ class CyberScenarioGenerator:
             self.client = None
     
     def fetch_osint(self, vendor):
-        simulated_osint = {
-            "Fortinet": [
-                "Active exploitation of FortiOS SSL-VPN vulnerabilities (e.g., CVE-2023-27997, CVE-2024-21762) by state-sponsored actors to deploy custom implants and bypass pre-authentication filters.",
-                "Threat actors leveraging unpatched FortiGate devices (e.g., CVE-2022-42475) to establish persistent access via malicious firmware images.",
-                "Widespread automated scanning and exploitation of FortiClient EMS SQL injection flaws (e.g., CVE-2023-48788) for remote code execution."
-            ],
-            "Palo Alto": [
-                "Rising trend of threat actors exploiting unpatched PAN-OS GlobalProtect interfaces (e.g., CVE-2024-3400) to achieve unauthenticated remote code execution and establish persistent reverse shells.",
-                "Targeted attacks abusing Palo Alto Expedition vulnerabilities (e.g., CVE-2024-5910) to extract administrative credentials and pivot internally.",
-                "Exploitation of PAN-OS configuration vulnerabilities by APT groups to bypass authentication mechanisms and silently modify edge routing rules."
-            ],
-            "Cisco": [
-                "Exploitation of AnyConnect and IOS XE zero-days (e.g., CVE-2023-20198), leading to privilege escalation and the deployment of malicious Lua-based web shells on edge appliances.",
-                "Targeting of legacy Cisco ASA firewalls (e.g., CVE-2020-3259) to extract memory contents and valid VPN user credentials.",
-                "Abuse of Cisco Secure Client vulnerabilities allowing attackers to bypass client-side posture checks and establish rogue VPN tunnels."
-            ],
-            "Check Point": [
-                "Targeted attacks exploiting Check Point Security Gateway vulnerabilities (e.g., CVE-2024-24919) to extract Active Directory hashes and establish persistent VPN sessions.",
-                "Ransomware affiliates exploiting legacy Mobile Access software blades to drop web shells into the DMZ.",
-                "Privilege escalation attacks targeting Check Point Gaia OS to achieve root-level persistence prior to internal network pivoting."
-            ],
-            "SonicWall": [
-                "Continued exploitation of SMA 100 series appliances (e.g., CVE-2021-20038) using credential stuffing and unpatched firmware to deploy ransomware directly into the DMZ.",
-                "Exploitation of SonicOS access control vulnerabilities (e.g., CVE-2024-40766) allowing unauthorized users to modify firewall policies.",
-                "Targeted attacks against SonicWall GMS appliances to push malicious configuration updates to edge networks."
-            ],
-            "WatchGuard": [
-                "Historical targeting by botnets exploiting unpatched privilege escalation flaws (e.g., CVE-2022-26318) to maintain long-term, stealthy persistence on edge devices.",
-                "Exploitation of authentication bypass vulnerabilities in WatchGuard Firebox appliances to hijack active administrative sessions."
-            ],
-            "Barracuda": [
-                "Sophisticated threat actors exploiting Email Security Gateway (ESG) zero-days (e.g., CVE-2023-2868) to deploy data exfiltration malware and backdoors.",
-                "Attacks abusing misconfigured Barracuda Web Application Firewalls to tunnel C2 traffic directly through port 443."
-            ],
-            "Juniper": [
-                "Exploitation of Junos OS J-Web vulnerabilities (e.g., CVE-2023-36844) allowing unauthenticated attackers to upload arbitrary files and execute code as root.",
-                "Exploitation of SRX Series authentication bypass vulnerabilities (e.g., CVE-2024-21591) to gain full administrative control of the edge device."
-            ],
-            "Forcepoint": [
-                "Adversaries leveraging unpatched Forcepoint VPN client vulnerabilities to escalate privileges to SYSTEM on compromised endpoints.",
-                "Abuse of Forcepoint Web Security configurations to bypass DLP controls and exfiltrate compressed archives to unauthorized cloud storage."
-            ],
-            "CrowdStrike": [
-                "Advanced adversaries increasingly utilizing custom bootloaders and kernel-level drivers (BYOVD - Bring Your Own Vulnerable Driver) to blind Falcon sensors (Reference: Elastic Security Labs BYOVD research).",
-                "Threat actors utilizing unmanaged devices on the local network to laterally move and disable Falcon services via stolen local admin credentials.",
-                "Process hollowing and direct syscalls specifically crafted to bypass user-mode API hooking used by the Falcon agent."
-            ],
-            "Microsoft Defender": [
-                "High reliance on 'Living off the Land' (LotL) techniques and obfuscated PowerShell scripts to evade standard Defender ASR rules and execute fileless malware.",
-                "Threat actors actively targeting and modifying Defender exclusion paths (e.g., via Add-MpPreference) using stolen administrative privileges.",
-                "Token theft techniques designed to bypass local LSA protections and extract credentials before Defender can intervene."
-            ],
-            "SentinelOne": [
-                "Threat actors utilizing highly obfuscated, fragmented shellcode and direct syscalls to evade SentinelOne's behavioral AI engines.",
-                "EDR blinding techniques involving forced safe mode reboots or manipulation of the boot configuration data to prevent the SentinelOne agent from loading.",
-                "Adversaries employing DLL side-loading alongside trusted, digitally signed applications to execute payloads beneath SentinelOne's detection thresholds."
-            ],
-            "Trend Micro": [
-                "Exploitation of legacy Apex One vulnerabilities (e.g., CVE-2022-40139) and exploitation of exclusion lists to deploy ransomware payloads undetected.",
-                "Targeting of unpatched Trend Micro endpoint agents to cause denial-of-service conditions prior to lateral movement."
-            ],
-            "Symantec": [
-                "Bypass of legacy signature-based protections using polymorphic malware families and living-off-the-land binaries (LOLBins).",
-                "Exploitation of memory-mapped file abuse to execute payloads undetected by Symantec Endpoint Protection's real-time scanning."
-            ],
-            "Trellix": [
-                "Evasion of Trellix Endpoint Security via complex process injection techniques and manipulation of trusted parent-child execution trees.",
-                "Rogue system detection evasion by spoofing MAC addresses and altering local endpoint firewall rules."
-            ],
-            "Blackberry Cylance": [
-                "AI engine evasion via artificial payload padding and the inclusion of benign code segments to artificially lower the malicious confidence score.",
-                "Bypassing of Cylance hooks using unmapped memory execution and Heaven's Gate techniques."
-            ],
-            "Okta": [
-                "Surge in highly sophisticated Adversary-in-the-Middle (AiTM) phishing kits (e.g., Evilginx2) capturing Okta session cookies and bypassing multi-factor authentication entirely (Reference: CISA Advisory AA23-320A).",
-                "Social engineering of IT Helpdesks (commonly used by Scattered Spider) to forcibly reset Okta MFA devices for targeted high-privilege users.",
-                "Dark web purchasing of stolen Okta session tokens exfiltrated by Lumma or RedLine infostealer malware, allowing direct access without triggering an authentication prompt."
-            ],
-            "Microsoft Entra ID (Azure AD)": [
-                "Widespread MFA fatigue (push bombing) attacks combined with localized brute-forcing to gain initial access to Entra ID.",
-                "Illicit consent grants involving malicious OAuth applications designed to maintain persistent, hidden access to Microsoft 365 environments and mailboxes.",
-                "Pass-the-PRT (Primary Refresh Token) attacks allowing adversaries to bypass Conditional Access policies and access cloud resources from unmanaged devices."
-            ],
-            "Cisco Duo": [
-                "Targeting of telephony-based authentication (SMS/Voice) via SIM swapping, successfully bypassing Duo's secondary validation.",
-                "Localized push-notification fatigue campaigns deployed during off-hours (1:00 AM - 4:00 AM) to wear down user defenses.",
-                "Extraction and abuse of Duo integration secrets from compromised internal servers to forge successful authentication approvals."
-            ],
-            "Ping Identity": [
-                "Exploitation of historic PingFederate vulnerabilities (e.g., CVE-2021-28111) to bypass multi-factor authentication.",
-                "SAML assertion forging attacks enabling threat actors to spoof identity claims across the internal network."
-            ],
-            "Mimecast": [
-                "Massive increase in Quishing (QR Code Phishing) and HTML smuggling campaigns that successfully bypass Mimecast's URL rewriting and attachment sandboxing (Reference: IBM X-Force Quishing Trends).",
-                "Weaponization of internal, trusted domains (Business Email Compromise) to distribute secondary payloads past Mimecast filtering.",
-                "Use of encrypted, password-protected ZIP files where the password is included in a benign image attachment, evading Mimecast deep inspection."
-            ],
-            "Proofpoint": [
-                "Threat actors leveraging highly customized, evasive PDF documents containing embedded malicious links that bypass TAP (Targeted Attack Protection) analysis.",
-                "Phishing campaigns utilizing embedded CAPTCHAs inside attachments to prevent Proofpoint sandboxes from executing and analyzing the malicious code.",
-                "Delayed payload activation strategies where the malicious URL remains benign during Proofpoint delivery inspection, only turning malicious hours later."
-            ],
-            "Microsoft Defender for Office 365": [
-                "Bypass of SafeLinks and SafeAttachments using highly sophisticated open-redirect vulnerabilities hosted on legitimate services (e.g., Google, Adobe).",
-                "Use of homoglyph domain spoofing and hijacked internal accounts to bypass standard Microsoft anti-spoofing and DMARC checks.",
-                "Distribution of malicious RPMSG (Restricted Permission Message) files that evade initial Microsoft scanning algorithms."
-            ],
-            "AWS": [
-                "Exploitation of overly permissive IAM roles via SSRF vulnerabilities on public-facing EC2 instances, leading to environment-wide administrative compromise.",
-                "Discovery and abuse of long-lived AWS Access Keys accidentally pushed to public GitHub repositories or left inside compromised developer environments.",
-                "Targeting of misconfigured, publicly exposed S3 buckets and exploitation of weakly configured AWS Lambda functions for initial execution."
-            ],
-            "Microsoft Azure": [
-                "Abuse of Azure Automation Runbooks and extraction of Managed Identity tokens to pivot laterally across the Azure environment.",
-                "Privilege escalation to Global Administrator via compromised on-premises AD Connect servers synchronizing hybrid identities.",
-                "Targeting of unauthenticated Azure API endpoints exposing sensitive backend container configurations."
-            ],
-            "GCP": [
-                "Targeting of exposed service account keys embedded in developer repositories to access Google Cloud Storage buckets and BigQuery datasets.",
-                "Abuse of the Google Compute Engine metadata API from compromised container workloads to extract lateral movement credentials.",
-                "Exploitation of overly permissive IAM bindings to establish persistence via hidden GCP service accounts."
-            ]
-        }
-        options = simulated_osint.get(vendor, [])
-        if options:
-            return random.choice(options)
-        return ""
+        options = SIMULATED_OSINT.get(vendor, [])
+        return random.choice(options) if options else ""
 
     def generate_recommendations(self, inputs):
         recs = []
-        
         recs.append("🛡️ **SECURITY ASSESSMENTS & ADVISORY**")
         
         if inputs['in_house_team'] == "Yes (24/7)" and inputs['savviness'] in ["Medium", "High"]:
@@ -209,371 +77,18 @@ class CyberScenarioGenerator:
     def call_llm(self, prompt):
         if not self.client:
             return "⚠️ Error: Please enter a valid Gemini API Key in the application code or via Streamlit secrets."
-            
-        full_prompt = f"{SYSTEM_PERSONA}\n\n{prompt}"
-        
         try:
             response = self.client.models.generate_content(
                 model='gemini-2.5-flash',
-                contents=full_prompt
+                contents=f"{SYSTEM_PERSONA}\n\n{prompt}"
             )
             return response.text
         except Exception as e:
             return f"⚠️ An error occurred while communicating with the Gemini API: {e}"
 
-# --- EXPORT LOGIC ---
-class ReportPDF(FPDF):
-    def header(self):
-        self.set_fill_color(0, 32, 96) 
-        self.rect(0, 0, 210, 20, 'F')   
-        self.set_y(6)
-        self.set_font('helvetica', 'B', 12)
-        self.set_text_color(255, 255, 255)
-        self.cell(0, 10, 'Threat Modeling & MDR Assessment', align='R')
-        self.set_y(25)
-        self.set_text_color(0, 0, 0)
-
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('helvetica', 'I', 8)
-        self.set_text_color(128, 128, 128)
-        self.cell(0, 10, f'Page {self.page_no()}', align='C')
-
-def draw_section_header(pdf, title):
-    pdf.ln(5)
-    pdf.set_font("helvetica", "B", 14)
-    pdf.set_text_color(0, 32, 96) 
-    pdf.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
-    pdf.set_draw_color(200, 200, 200) 
-    pdf.set_line_width(0.5)
-    pdf.line(pdf.get_x(), pdf.get_y(), 210 - 15, pdf.get_y()) 
-    pdf.ln(4)
-    pdf.set_text_color(0, 0, 0)
-
-def clean_pdf_text(text):
-    if not text: return ""
-    text = text.replace('\xa0', ' ').replace('\t', ' ')
-    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
-    text = text.replace('–', '-').replace('—', '-')
-    text = text.replace('### ', '').replace('## ', '').replace('# ', '') 
-    text = text.encode('ascii', 'ignore').decode('ascii')
-    return text.strip()
-
-def clean_mdr_text(text):
-    """Specifically strips all markdown links and code backticks for the Courier Case Log to guarantee perfect monospaced wrapping."""
-    if not text: return ""
-    text = text.replace('\xa0', ' ').replace('\t', ' ')
-    # Convert links from [Text](URL) to plain Text (URL)
-    text = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'\1 (\2)', text)
-    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
-    text = text.replace('–', '-').replace('—', '-')
-    text = text.replace('### ', '').replace('## ', '').replace('# ', '')
-    # Strip markdown emphasis and backticks that crash monospaced FPDF wrapping
-    text = text.replace('**', '').replace('*', '').replace('`', '')
-    text = text.encode('ascii', 'ignore').decode('ascii')
-    return text.strip()
-
-def clean_pptx_text(text):
-    if not text: return ""
-    text = text.replace('\xa0', ' ').replace('\t', ' ')
-    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
-    text = text.replace('–', '-').replace('—', '-')
-    text = text.replace('### ', '').replace('## ', '').replace('# ', '') 
-    text = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'\1: \2', text)
-    text = text.replace('**', '').replace('*', '')
-    text = text.encode('ascii', 'ignore').decode('ascii')
-    return text.strip()
-
-def robust_multi_cell(pdf, w, h, txt, align="L", fill=False):
-    try:
-        pdf.multi_cell(w=w, h=h, txt=txt, align=align, markdown=True, fill=fill)
-    except Exception:
-        safe_txt = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'\1 (\2)', txt).replace('**', '').replace('*', '')
-        wrap_width = 85 if w == 0 else int(w / 2.0) 
-        lines = textwrap.wrap(safe_txt, width=wrap_width, break_long_words=True)
-        for line in lines:
-            pdf.cell(w=w, h=h, txt=line, align=align, fill=fill, new_x="LMARGIN", new_y="NEXT")
-
-def write_safe_text(pdf, text, font_family="helvetica"):
-    pdf.set_font(font_family, "", 10)
-    paragraphs = text.split('\n')
-    for paragraph in paragraphs:
-        if paragraph.strip():
-            robust_multi_cell(pdf, 0, 6, paragraph)
-            pdf.ln(2) 
-        else:
-            pdf.ln(2)
-
-def draw_visual_timeline(pdf, timeline_text):
-    if not timeline_text: return
-    
-    draw_section_header(pdf, "Attack Timeline & Early MDR Intervention")
-    entries = timeline_text.strip().split('\n')
-    
-    x_node = 20
-    x_text = 30
-    
-    for i, entry in enumerate(entries):
-        if not entry.strip() or '|' not in entry: 
-            continue
-            
-        timestamp, event = entry.split('|', 1)
-        
-        if pdf.get_y() > 250:
-            pdf.add_page()
-            
-        start_y = pdf.get_y()
-        
-        pdf.set_fill_color(0, 32, 96)
-        pdf.ellipse(x=x_node - 2, y=start_y + 1, w=4, h=4, style='F')
-        
-        pdf.set_x(x_text)
-        pdf.set_font("helvetica", "B", 10)
-        pdf.set_text_color(0, 32, 96)
-        pdf.cell(w=0, h=6, txt=clean_pdf_text(timestamp.strip()), new_x="LMARGIN", new_y="NEXT")
-        
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font("helvetica", "", 10)
-        pdf.set_x(x_text)
-        
-        usable_width = 210 - x_text - 15 
-        robust_multi_cell(pdf, usable_width, 5, clean_pdf_text(event.strip()))
-            
-        end_y = pdf.get_y()
-        
-        if i < len(entries) - 1:
-            pdf.set_draw_color(200, 200, 200)
-            pdf.set_line_width(0.5)
-            pdf.line(x_node, start_y + 6, x_node, end_y + 2)
-            
-        pdf.ln(5)
-
-def create_pdf(inputs, scenario, recs, mdr_case):
-    timeline_match = re.search(r'\[TIMELINE_START\](.*?)\[TIMELINE_END\]', scenario, re.DOTALL)
-    if timeline_match:
-        timeline_text = timeline_match.group(1).strip()
-        main_scenario = re.sub(r'\[TIMELINE_START\].*?\[TIMELINE_END\]', '', scenario, flags=re.DOTALL).strip()
-    else:
-        timeline_text = None
-        main_scenario = scenario
-
-    pdf = ReportPDF()
-    pdf.add_page()
-    
-    pdf.set_font("helvetica", "B", 18)
-    pdf.cell(w=0, h=12, txt="Cybersecurity Threat & Advisory Report", new_x="LMARGIN", new_y="NEXT", align="C")
-    
-    pdf.set_font("helvetica", "I", 11)
-    pdf.set_text_color(100, 100, 100) 
-    pdf.cell(w=0, h=6, txt=f"Prepared for: {inputs['customer_name']}", new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.cell(w=0, h=6, txt=f"Presented by: {inputs['consultant_name']}", new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.set_text_color(0, 0, 0) 
-    pdf.ln(8)
-    
-    draw_section_header(pdf, "Client Estate Summary")
-    pdf.set_fill_color(245, 245, 245) 
-    pdf.set_font("helvetica", "", 10)
-    
-    summary_text = (
-        f"Industry: {inputs['industry']}   |   Users: {inputs['users']}   |   Endpoints: {inputs['endpoints']}\n"
-        f"Critical Infrastructure: {inputs['critical_infra']}\n"
-        f"M365 License: {inputs['m365_license']}   |   Cloud: {inputs['cloud_env']}\n"
-        f"Endpoint: {inputs['endpoint']}   |   Email: {inputs['email']}\n"
-        f"Perimeter: {inputs['firewall']} Firewall   |   Identity: {inputs['identity']}\n"
-        f"Internal Security: {inputs['in_house_team']}"
-    )
-    
-    for line in summary_text.split('\n'):
-        pdf.cell(w=0, h=7, txt=f"  {line}", new_x="LMARGIN", new_y="NEXT", fill=True)
-    
-    pdf.ln(6)
-    
-    draw_section_header(pdf, "Targeted Threat Narrative & Solutions")
-    write_safe_text(pdf, clean_pdf_text(main_scenario))
-    pdf.ln(6)
-    
-    if timeline_text:
-        draw_visual_timeline(pdf, timeline_text)
-        pdf.ln(6)
-    
-    pdf.add_page() 
-    draw_section_header(pdf, "Simulated Sophos MDR Case Log")
-    
-    pdf.set_font("courier", "", 9)
-    pdf.set_fill_color(240, 248, 255) 
-    
-    # NEW: We strictly strip markdown and use python's textwrap to guarantee monospaced boundaries.
-    clean_mdr = clean_mdr_text(mdr_case)
-    for line in clean_mdr.split('\n'):
-        # 95 characters is exactly the math needed for 9pt Courier to fill 190mm on an A4 page.
-        wrapped_lines = textwrap.wrap(line, width=95, break_long_words=True)
-        if not wrapped_lines:
-            pdf.cell(w=0, h=5, txt="", new_x="LMARGIN", new_y="NEXT", fill=True)
-        for w_line in wrapped_lines:
-            pdf.cell(w=0, h=5, txt=f" {w_line}", align="L", fill=True, new_x="LMARGIN", new_y="NEXT")
-            
-    pdf.ln(6)
-    
-    draw_section_header(pdf, "Recommended Security Testing & Advisory")
-    for r in recs:
-        if r.startswith("🛡️") or r.startswith("⚙️"):
-            pdf.ln(3)
-            write_safe_text(pdf, clean_pdf_text(r))
-        else:
-            pdf.set_x(15)
-            robust_multi_cell(pdf, 0, 6, clean_pdf_text(r))
-            pdf.ln(2)
-        
-    return bytes(pdf.output())
-
-def create_pptx(inputs, scenario, recs, mdr_case):
-    DARK_BLUE = RGBColor(0, 32, 96)
-    
-    timeline_match = re.search(r'\[TIMELINE_START\](.*?)\[TIMELINE_END\]', scenario, re.DOTALL)
-    if timeline_match:
-        timeline_text = timeline_match.group(1).strip()
-        main_scenario = re.sub(r'\[TIMELINE_START\].*?\[TIMELINE_END\]', '', scenario, flags=re.DOTALL).strip()
-    else:
-        timeline_text = None
-        main_scenario = scenario
-
-    prs = Presentation()
-    
-    title_slide_layout = prs.slide_layouts[0]
-    slide1 = prs.slides.add_slide(title_slide_layout)
-    title = slide1.shapes.title
-    subtitle = slide1.placeholders[1]
-    title.text = "Threat Modeling & MDR Assessment"
-    title.text_frame.paragraphs[0].font.color.rgb = DARK_BLUE
-    subtitle.text = f"Prepared for: {inputs['customer_name']}\nPresented by: {inputs['consultant_name']}\n{inputs['industry']} Sector"
-    
-    bullet_slide_layout = prs.slide_layouts[1]
-    slide2 = prs.slides.add_slide(bullet_slide_layout)
-    slide2.shapes.title.text = "Client Estate Overview"
-    slide2.shapes.title.text_frame.paragraphs[0].font.color.rgb = DARK_BLUE
-    tf2 = slide2.shapes.placeholders[1].text_frame
-    tf2.clear()
-    
-    details = [
-        f"Target Industry: {inputs['industry']}",
-        f"Total User Base: {inputs['users']} Users (Security Savviness: {inputs['savviness']})",
-        f"Infrastructure: {inputs['endpoints']} Endpoints | {inputs['servers']} Servers",
-        f"Crown Jewels: {inputs['critical_infra']}",
-        f"Internal Security Team: {inputs['in_house_team']}",
-        "Current Technology Stack:",
-        f"  • Endpoint: {inputs['endpoint']}",
-        f"  • Perimeter: {inputs['firewall']}",
-        f"  • Identity: {inputs['identity']}",
-        f"  • Email: {inputs['email']}",
-        f"  • M365/Cloud: {inputs['m365_license']} | {inputs['cloud_env']}"
-    ]
-    
-    for d in details:
-        p = tf2.add_paragraph()
-        p.text = d
-        p.font.size = Pt(14)
-        if "Technology Stack:" in d:
-            p.font.bold = True
-            p.space_before = Pt(14)
-    
-    slide3 = prs.slides.add_slide(bullet_slide_layout)
-    slide3.shapes.title.text = "Threat Narrative: Executive Summary"
-    slide3.shapes.title.text_frame.paragraphs[0].font.color.rgb = DARK_BLUE
-    tf3 = slide3.shapes.placeholders[1].text_frame
-    tf3.word_wrap = True 
-    tf3.clear()
-    
-    paras = [p for p in main_scenario.split('\n') if p.strip()]
-    exec_summary = paras[:2] if len(paras) >= 2 else paras
-    
-    for para in exec_summary:
-        p = tf3.add_paragraph()
-        p.text = clean_pptx_text(para)
-        p.font.size = Pt(14) 
-        p.space_after = Pt(14)
-    
-    blank_slide_layout = prs.slide_layouts[5] 
-    slide4 = prs.slides.add_slide(blank_slide_layout)
-    slide4.shapes.title.text = "Attack Timeline & MDR Intervention"
-    slide4.shapes.title.text_frame.paragraphs[0].font.color.rgb = DARK_BLUE
-
-    if timeline_text:
-        entries = timeline_text.strip().split('\n')
-        x_node = Inches(0.8)
-        x_text = Inches(1.3)
-        y_offset = Inches(1.8) 
-        text_width = Inches(8.0)
-
-        for i, entry in enumerate(entries):
-            if '|' not in entry: continue
-            timestamp, event = entry.split('|', 1)
-
-            node = slide4.shapes.add_shape(MSO_SHAPE.OVAL, x_node, y_offset, Inches(0.2), Inches(0.2))
-            node.fill.solid()
-            node.fill.fore_color.rgb = DARK_BLUE
-            node.line.color.rgb = DARK_BLUE
-
-            txBox = slide4.shapes.add_textbox(x_text, y_offset - Inches(0.1), text_width, Inches(0.5))
-            tf = txBox.text_frame
-            tf.word_wrap = True
-
-            p1 = tf.paragraphs[0]
-            p1.text = clean_pptx_text(timestamp.strip())
-            p1.font.bold = True
-            p1.font.color.rgb = DARK_BLUE
-            p1.font.size = Pt(12)
-
-            p2 = tf.add_paragraph()
-            p2.text = clean_pptx_text(event.strip())
-            p2.font.size = Pt(12)
-
-            line_height = Inches(0.8)
-            if len(event) > 80: line_height = Inches(1.2)
-            if len(event) > 150: line_height = Inches(1.5)
-            
-            next_y_offset = y_offset + line_height
-
-            if i < len(entries) - 1:
-                connector = slide4.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, x_node + Inches(0.1), y_offset + Inches(0.2), x_node + Inches(0.1), next_y_offset)
-                connector.line.color.rgb = RGBColor(150, 150, 150)
-
-            y_offset = next_y_offset
-
-    slide5 = prs.slides.add_slide(bullet_slide_layout)
-    slide5.shapes.title.text = "Security Advisory Summary"
-    slide5.shapes.title.text_frame.paragraphs[0].font.color.rgb = DARK_BLUE
-    tf5 = slide5.shapes.placeholders[1].text_frame
-    tf5.word_wrap = True
-    tf5.clear() 
-    
-    for r in recs:
-        if r.startswith("🛡️") or r.startswith("⚙️"):
-            p5 = tf5.add_paragraph()
-            p5.text = clean_pptx_text(r)
-            p5.font.bold = True
-            p5.font.size = Pt(16)
-            p5.font.color.rgb = DARK_BLUE
-            p5.level = 0
-            p5.space_before = Pt(10)
-        else:
-            match = re.search(r'\[([^\]]+)\]', r)
-            if match:
-                short_name = match.group(1) 
-            else:
-                short_name = r.split(':')[0].replace('•', '').strip()
-                
-            p5 = tf5.add_paragraph()
-            p5.text = short_name
-            p5.font.size = Pt(14)
-            p5.level = 1
-            
-    pptx_stream = io.BytesIO()
-    prs.save(pptx_stream)
-    return pptx_stream.getvalue()
 
 # --- STREAMLIT FRONTEND ---
 st.set_page_config(page_title="MDR & Testing Scenario Generator", page_icon="🛡️", layout="wide")
-
 st.title("🛡️ MDR & Offensive Security Scenario Generator")
 st.markdown("Generate highly tailored cyberattack scenarios, complete with mock Sophos Central case logs.")
 
@@ -602,7 +117,6 @@ with st.sidebar:
     st.subheader("💻 Technology Stack")
     endpoints = st.number_input("Number of Endpoints", min_value=1, value=600)
     servers = st.number_input("Number of Servers", min_value=1, value=50)
-    
     endpoint = st.selectbox("Endpoint Security", ["Sophos", "Microsoft Defender", "CrowdStrike", "SentinelOne", "Trend Micro", "Symantec", "Trellix", "Blackberry Cylance", "Other"])
     firewall = st.selectbox("Firewall Vendor", ["Fortinet", "Palo Alto", "Cisco", "Check Point", "SonicWall", "WatchGuard", "Juniper", "Barracuda", "Forcepoint", "Sophos", "Other"])
     identity = st.selectbox("Identity Provider", ["Microsoft Entra ID (Azure AD)", "Okta", "Cisco Duo", "Ping Identity", "On-Prem Active Directory", "None / Local Only"])
@@ -615,53 +129,24 @@ with st.sidebar:
     public_web_apps = st.checkbox("Host Public-Facing Web Applications?")
     
     st.subheader("🛠️ Custom Scenario Override")
-    custom_scenario = st.text_area("Specific Threat/Use Case (Optional)", placeholder="e.g., 'How would Sophos MDR detect a BlackBasta ransomware deployment via a compromised VPN?' Leave blank for a random scenario.")
-
+    custom_scenario = st.text_area("Specific Threat/Use Case (Optional)", placeholder="e.g., 'How would Sophos MDR detect a BlackBasta deployment?'")
     generate_btn = st.button("Generate Full Scenario", type="primary")
 
-# --- SESSION STATE GENERATION ---
+# --- GENERATION LOGIC ---
 if generate_btn:
     client_inputs = {
         "customer_name": customer_name, "consultant_name": consultant_name,
         "industry": industry, "users": users, "savviness": savviness, 
         "endpoints": endpoints, "servers": servers, "critical_infra": critical_infra,
-        "endpoint": endpoint, "firewall": firewall, "identity": identity, "m365_license": m365_license, "email": email, "cloud_env": cloud_env,
+        "endpoint": endpoint, "firewall": firewall, "identity": identity, 
+        "m365_license": m365_license, "email": email, "cloud_env": cloud_env,
         "in_house_team": in_house_team, "physical_locations": physical_locations, "public_web_apps": public_web_apps
     }
     
     st.session_state['client_inputs'] = client_inputs
     st.session_state['customer_name'] = customer_name
     
-    attack_vectors = [
-        "Highly targeted spear-phishing campaign using a malicious PDF attachment (T1566.001)",
-        "Adversary-in-the-Middle (AiTM) proxy attack defeating standard MFA via a fake login page (T1556)",
-        "Voice Phishing (Vishing) the IT Helpdesk to fraudulently reset a user's MFA device (T1566.004)",
-        "Social engineering via LinkedIn/Slack delivering a malicious payload disguised as a resume (T1566.003)",
-        "Spear-phishing utilizing HTML Smuggling to deliver a malicious ISO archive bypassing email attachment filters (T1027.006)",
-        "QR Code Phishing (Quishing) evading URL inspection by routing mobile devices to a credential harvesting proxy (T1566)",
-        "Drive-by compromise via SEO poisoning (Malvertising) directing a user to a trojanized software installer (T1189)",
-        "Exploitation of a zero-day vulnerability in a public-facing web application (T1190)",
-        "Exploitation of an unpatched, legacy VPN appliance leading to internal access (T1133)",
-        "Password spraying attack against legacy authentication protocols lacking MFA enforcement (T1110.003)",
-        "Default credentials left active on an internet-facing IoT or edge network device (T1078.001)",
-        "Brute-force dictionary attack against an unintentionally exposed RDP jump server (T1110.001)",
-        "Compromised third-party IT contractor / Supply Chain Compromise via remote access tools (T1195)",
-        "Malicious update pushed through a compromised third-party software vendor (T1195.002)",
-        "Lateral pivot into the network originating from a compromised trusted vendor's environment (T1199)",
-        "Abuse of compromised Managed Service Provider (MSP) remote monitoring and management (RMM) tools (T1195)",
-        "Supply chain compromise via malicious code injected into a trusted open-source NPM/PyPI library used by the internal dev team (T1195.001)",
-        "Compromised Cloud Infrastructure via hardcoded API keys accidentally leaked on GitHub (T1078.004)",
-        "Session hijacking via stolen browser cookies purchased on the dark web, bypassing MFA entirely (T1539)",
-        "MFA Fatigue (Push Bombing) attack against a senior executive's compromised credentials (T1621)",
-        "Illicit consent grant via a malicious Microsoft 365 / Google Workspace OAuth application (T1528)",
-        "Exploitation of a publicly exposed, misconfigured cloud storage bucket containing administrative credentials (T1078.004)",
-        "Malicious insider abusing legitimate administrative privileges to disable security tooling (T1078.003)",
-        "Physical 'USB Drop' attack in the company parking lot leading to a reverse shell beacon (T1200)",
-        "Initial access originating from a user's malware-infected personal BYOD device connecting to the corporate network (T1133)",
-        "Physical intrusion deploying a rogue hidden network implant (e.g., LAN Turtle) in a remote branch office (T1200)"
-    ]
-    
-    selected_vector = random.choice(attack_vectors)
+    selected_vector = random.choice(ATTACK_VECTORS)
     
     with st.spinner("Analyzing estate and generating narrative with Gemini 2.5 Flash..."):
         osint_list = [
@@ -694,7 +179,7 @@ if generate_btn:
             
     st.success("Analysis Complete!")
 
-# --- UI RENDERING FROM SESSION STATE ---
+# --- UI RENDERING ---
 if 'scenario' in st.session_state:
     scenario = st.session_state['scenario']
     mdr_case = st.session_state['mdr_case']
