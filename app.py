@@ -144,13 +144,10 @@ def draw_section_header(pdf, title):
     pdf.ln(4)
     pdf.set_text_color(0, 0, 0)
 
-def clean_text(text):
+def clean_pdf_text(text):
+    """Prepares text for FPDF. Keeps ** and [text](url) intact for native markdown rendering. Strips headers."""
     if not text: return ""
     text = text.replace('\xa0', ' ').replace('\t', ' ')
-    
-    text = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'\1 (\2)', text)
-    
-    text = text.replace('**', '').replace('*', '').replace('#', '')
     text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
     text = text.replace('–', '-').replace('—', '-')
     text = text.replace('### ', '').replace('## ', '').replace('# ', '') 
@@ -158,18 +155,28 @@ def clean_text(text):
     return text.strip()
 
 def clean_pptx_text(text):
-    text = clean_text(text)
+    """Prepares text for PPTX. Converts [Text](URL) into "Text: URL" and strips bold/italics markers."""
+    if not text: return ""
+    text = text.replace('\xa0', ' ').replace('\t', ' ')
+    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
+    text = text.replace('–', '-').replace('—', '-')
+    text = text.replace('### ', '').replace('## ', '').replace('# ', '') 
+    # Convert [Text](URL) into "Text: URL"
     text = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'\1: \2', text)
+    # Strip asterisks
     text = text.replace('**', '').replace('*', '')
+    text = text.encode('ascii', 'ignore').decode('ascii')
     return text.strip()
 
 def robust_multi_cell(pdf, w, h, txt, align="L", fill=False):
+    """A bulletproof FPDF wrapper. Parses Markdown links nicely so URLs hide behind text. Falls back to textwrap if it crashes."""
     try:
         pdf.multi_cell(w=w, h=h, txt=txt, align=align, markdown=True, fill=fill)
     except Exception:
-        safe_txt = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'\1', txt).replace('**', '').replace('*', '')
-        wrap_width = 90 if w == 0 else int(w / 1.8) 
-        lines = textwrap.wrap(safe_txt, width=wrap_width)
+        # Failsafe: Strip markdown completely and forcefully split long words/URLs
+        safe_txt = re.sub(r'\[([^\]]+)\]\((https?://[^\)]+)\)', r'\1 (\2)', txt).replace('**', '').replace('*', '')
+        wrap_width = 85 if w == 0 else int(w / 2.0) 
+        lines = textwrap.wrap(safe_txt, width=wrap_width, break_long_words=True)
         for line in lines:
             pdf.cell(w=w, h=h, txt=line, align=align, fill=fill, new_x="LMARGIN", new_y="NEXT")
 
@@ -209,14 +216,14 @@ def draw_visual_timeline(pdf, timeline_text):
         pdf.set_x(x_text)
         pdf.set_font("helvetica", "B", 10)
         pdf.set_text_color(0, 32, 96)
-        pdf.cell(w=0, h=6, txt=clean_text(timestamp.strip()), new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(w=0, h=6, txt=clean_pdf_text(timestamp.strip()), new_x="LMARGIN", new_y="NEXT")
         
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("helvetica", "", 10)
         pdf.set_x(x_text)
         
         usable_width = 210 - x_text - 15 
-        robust_multi_cell(pdf, usable_width, 5, clean_text(event.strip()))
+        robust_multi_cell(pdf, usable_width, 5, clean_pdf_text(event.strip()))
             
         end_y = pdf.get_y()
         
@@ -268,7 +275,7 @@ def create_pdf(inputs, scenario, recs, mdr_case):
     pdf.ln(6)
     
     draw_section_header(pdf, "Targeted Threat Narrative & Solutions")
-    write_safe_text(pdf, clean_text(main_scenario))
+    write_safe_text(pdf, clean_pdf_text(main_scenario))
     pdf.ln(6)
     
     if timeline_text:
@@ -281,7 +288,7 @@ def create_pdf(inputs, scenario, recs, mdr_case):
     pdf.set_font("courier", "", 9)
     pdf.set_fill_color(240, 248, 255) 
     
-    clean_mdr = clean_text(mdr_case)
+    clean_mdr = clean_pdf_text(mdr_case)
     for line in clean_mdr.split('\n'):
         robust_multi_cell(pdf, 0, 5, f" {line}", fill=True)
             
@@ -291,10 +298,10 @@ def create_pdf(inputs, scenario, recs, mdr_case):
     for r in recs:
         if r.startswith("🛡️") or r.startswith("⚙️"):
             pdf.ln(3)
-            write_safe_text(pdf, clean_text(r))
+            write_safe_text(pdf, clean_pdf_text(r))
         else:
             pdf.set_x(15)
-            robust_multi_cell(pdf, 0, 6, clean_text(r))
+            robust_multi_cell(pdf, 0, 6, clean_pdf_text(r))
             pdf.ln(2)
         
     return bytes(pdf.output())
@@ -435,7 +442,6 @@ if generate_btn:
         "in_house_team": in_house_team, "physical_locations": physical_locations, "public_web_apps": public_web_apps
     }
     
-    # Store dynamic inputs in session state so file names match the generated output
     st.session_state['client_inputs'] = client_inputs
     st.session_state['customer_name'] = customer_name
     
@@ -477,12 +483,10 @@ if generate_btn:
         
         recs = app_engine.generate_recommendations(client_inputs)
         
-        # Save results to session state
         st.session_state['scenario'] = scenario
         st.session_state['mdr_case'] = mdr_case
         st.session_state['recs'] = recs
         
-        # Pre-generate bytes for persistence
         if "⚠️ Error" not in scenario and "⚠️ An error" not in scenario:
             st.session_state['pdf_bytes'] = create_pdf(client_inputs, scenario, recs, mdr_case)
             st.session_state['pptx_bytes'] = create_pptx(client_inputs, scenario, recs, mdr_case)
@@ -494,7 +498,6 @@ if generate_btn:
 
 # --- UI RENDERING FROM SESSION STATE ---
 if 'scenario' in st.session_state:
-    # Retrieve from cache
     scenario = st.session_state['scenario']
     mdr_case = st.session_state['mdr_case']
     recs = st.session_state['recs']
