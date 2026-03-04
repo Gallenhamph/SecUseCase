@@ -287,29 +287,3 @@ def create_pptx(inputs, scenario, recs, mdr_case):
             y_offset = next_y_offset
 
     slide5 = prs.slides.add_slide(bullet_slide_layout)
-    slide5.shapes.title.text = "Security Advisory Summary"
-    slide5.shapes.title.text_frame.paragraphs[0].font.color.rgb = DARK_BLUE
-    tf5 = slide5.shapes.placeholders[1].text_frame
-    tf5.word_wrap = True
-    tf5.clear() 
-    
-    for r in recs:
-        if r.startswith("🛡️") or r.startswith("⚙️"):
-            p5 = tf5.add_paragraph()
-            p5.text = clean_text(r, "pptx")
-            p5.font.bold = True
-            p5.font.size = Pt(16)
-            p5.font.color.rgb = DARK_BLUE
-            p5.level = 0
-            p5.space_before = Pt(10)
-        else:
-            match = re.search(r'\[([^\]]+)\]', r)
-            short_name = match.group(1) if match else r.split(':')[0].replace('•', '').strip()
-            p5 = tf5.add_paragraph()
-            p5.text = short_name
-            p5.font.size = Pt(14)
-            p5.level = 1
-            
-    pptx_stream = io.BytesIO()
-    prs.save(pptx_stream)
-    return pptx_stream.getvalue()

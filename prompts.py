@@ -17,6 +17,10 @@ CORE OBJECTIVES:
 6. Position Sophos MDR & Behavioral Detections: Clearly articulate how human-led threat hunting and cross-vendor telemetry ingestion would have interrupted the attack chain using specific Sophos Malicious Behavior Types (e.g., Suspicious C2 Traffic, Credential Access/Theft, Defense Evasion).
 7. Recommend Portfolio Products: Always suggest specific Sophos products mapping directly to the vulnerabilities exploited.
 8. PROTECT THE SOPHOS BRAND: Under NO circumstances should you criticize, blame, or imply that any Sophos product failed. If the client's current stack includes Sophos products, the breach MUST be attributed strictly to extreme human error, a zero-day exploit in a third-party system, or gross administrative misconfiguration.
+9. AUTHORIZED MDR RESPONSE ACTIONS (STRICT GUARDRAIL): When describing Sophos MDR taking action to neutralize a threat, you MUST ONLY use the following officially supported response actions. Do not invent, generalize, or hallucinate capabilities outside this list:
+   - Endpoint/Host Actions: Isolate hosts, Terminate processes, Delete artifacts, Remove scheduled tasks, Remove startup items, Clean the registry, Block files by SHA256, Block websites/IPs/CIDR via Web Control, Block applications via App Control, Run system scans, Use Live Terminal for direct host access.
+   - Microsoft 365 / Identity Actions: Block user sign-in, Enable user sign-in, Disconnect current sessions, Disable inbox rules, Disable a user account.
+   - Network / Other Actions: Active Threat Response (Configure blocklists on Sophos Firewall OS V20+), Carry out response actions on selected third parties, Change Configurations (adjust threat policies, enable EDR/MDR on unprotected devices, adjust exclusions).
 """
 
 def build_scenario_prompt(client_inputs, osint_data, attack_vector, custom_scenario=""):
@@ -50,9 +54,9 @@ def build_scenario_prompt(client_inputs, osint_data, attack_vector, custom_scena
         SCENARIO REQUIREMENTS:
         - Section 1 (Threat Actor & Initial Access): Explicitly adapt the custom scenario requested to the client's environment. Include hyperlinked MITRE ATT&CK T-codes and CVEs.
         - Section 2 (Attacker Progression & Sophistication): Detail how the threat actor attempts to move toward the {client_inputs['critical_infra']}.
-        - Section 3 (The Sophos MDR Response): Heavily focus on how Sophos MDR's 24/7 analysts detect and respond using recognized Malicious Behavior Types. Detail {client_inputs['m365_license']} integrations if applicable.
+        - Section 3 (The Sophos MDR Response): Heavily focus on how Sophos MDR's 24/7 analysts detect and respond using recognized Malicious Behavior Types. Explain how Sophos MDR neutralized the threat using ONLY the Authorized MDR Response Actions listed in your system instructions. Detail {client_inputs['m365_license']} integrations if applicable.
         - Section 4 (Recommended Solutions Summary): Summarize the defense strategy naming 2-3 additional Sophos products.
-        - Section 5 (Attack Timeline & Early MDR Intervention): Provide a chronological timeline. Emphasize that Sophos MDR detects and neutralizes the threat EARLY based on explicit behavioral detections. Subsequent steps represent what WOULD have happened.
+        - Section 5 (Attack Timeline & Early MDR Intervention): Provide a chronological timeline. Emphasize that Sophos MDR detects and neutralizes the threat EARLY based on explicit behavioral detections and authorized response actions. Subsequent steps represent what WOULD have happened.
 
         FORMATTING CONSTRAINTS:
         - OUTPUT ONLY THE REPORT TEXT.
@@ -69,9 +73,9 @@ def build_scenario_prompt(client_inputs, osint_data, attack_vector, custom_scena
         SCENARIO REQUIREMENTS:
         - Section 1 (Threat Actor & Initial Access): Name the suspected Threat Actor group. YOU MUST use this Initial Access Vector: "{attack_vector}". Include hyperlinked MITRE T-codes and CVEs.
         - Section 2 (Lateral Movement & Alert Fatigue): Detail movement toward the {client_inputs['critical_infra']}. Explain why siloed tools missed it and how the team ({client_inputs['in_house_team']}) was overwhelmed.
-        - Section 3 (The Sophos MDR Differentiator): Explain how Sophos MDR would have neutralized the threat using explicit Malicious Behavior Types. Cite {client_inputs['m365_license']} integrations if applicable.
+        - Section 3 (The Sophos MDR Differentiator): Explain how Sophos MDR would have neutralized the threat using explicit Malicious Behavior Types. You MUST ONLY cite actions from the Authorized MDR Response Actions listed in your system instructions. Cite {client_inputs['m365_license']} integrations if applicable.
         - Section 4 (Recommended Solutions Summary): Summarize the defense strategy naming 2-3 additional Sophos products.
-        - Section 5 (Attack Timeline & Early MDR Intervention): Provide a chronological timeline. Emphasize that Sophos MDR detects and neutralizes the threat EARLY based on explicit behavioral detections. Subsequent steps represent what WOULD have happened.
+        - Section 5 (Attack Timeline & Early MDR Intervention): Provide a chronological timeline. Emphasize that Sophos MDR detects and neutralizes the threat EARLY based on explicit behavioral detections and authorized response actions. Subsequent steps represent what WOULD have happened.
 
         FORMATTING CONSTRAINTS:
         - OUTPUT ONLY THE REPORT TEXT.
@@ -110,7 +114,7 @@ def build_mdr_case_prompt(client_inputs, scenario):
     [Concise, highly technical synopsis of the trigger, investigation, and MDR response. Name the suspected malware/Actor, and note specific MITRE TTPs and Malicious Behavior Types.]
 
     //Response Actions:
-    [2-3 bullet points of specific neutralization actions.]
+    [Provide 2-3 bullet points of the specific actions taken by the MDR team to neutralize the threat. You MUST ONLY select from the Authorized MDR Response Actions provided in your system instructions (e.g., Isolating hosts, Disconnecting M365 sessions, Terminating processes, Blocking SHA256 hashes, Removing scheduled tasks, Active Threat Response). Do not invent unsupported actions.]
 
     //Recommendations:
     [3-4 vendor-agnostic hardening steps.]
