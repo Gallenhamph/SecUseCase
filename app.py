@@ -188,9 +188,19 @@ if generate_btn:
         st.session_state['mdr_case'] = mdr_case
         st.session_state['recs'] = recs
         
+        # NEW: Try/Except blocks to isolate export crashes
         if "⚠️ Error" not in scenario and "⚠️ An error" not in scenario:
-            st.session_state['pdf_bytes'] = create_pdf(client_inputs, scenario, recs, mdr_case)
-            st.session_state['pptx_bytes'] = create_pptx(client_inputs, scenario, recs, mdr_case)
+            try:
+                st.session_state['pdf_bytes'] = create_pdf(client_inputs, scenario, recs, mdr_case)
+            except Exception as e:
+                st.error(f"PDF Generation Failed: {e}")
+                st.session_state['pdf_bytes'] = None
+                
+            try:
+                st.session_state['pptx_bytes'] = create_pptx(client_inputs, scenario, recs, mdr_case)
+            except Exception as e:
+                st.error(f"PowerPoint Generation Failed: {e}")
+                st.session_state['pptx_bytes'] = None
         else:
             st.session_state['pdf_bytes'] = None
             st.session_state['pptx_bytes'] = None
@@ -228,22 +238,25 @@ if 'scenario' in st.session_state:
         
     st.divider()
     
-    if st.session_state.get('pdf_bytes') and st.session_state.get('pptx_bytes'):
+    # NEW: Show buttons independently using 'or' instead of 'and'
+    if st.session_state.get('pdf_bytes') or st.session_state.get('pptx_bytes'):
         st.subheader("📥 Export Client Deliverables")
         dl_col1, dl_col2 = st.columns(2)
         
         with dl_col1:
-            st.download_button(
-                label="📄 Download PDF Report",
-                data=st.session_state['pdf_bytes'],
-                file_name=f"{cached_customer_name.replace(' ', '_')}_MDR_Report.pdf",
-                mime="application/pdf"
-            )
+            if st.session_state.get('pdf_bytes'):
+                st.download_button(
+                    label="📄 Download PDF Report",
+                    data=st.session_state['pdf_bytes'],
+                    file_name=f"{cached_customer_name.replace(' ', '_')}_MDR_Report.pdf",
+                    mime="application/pdf"
+                )
             
         with dl_col2:
-            st.download_button(
-                label="📊 Download PowerPoint Deck",
-                data=st.session_state['pptx_bytes'],
-                file_name=f"{cached_customer_name.replace(' ', '_')}_MDR_Deck.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-            )
+            if st.session_state.get('pptx_bytes'):
+                st.download_button(
+                    label="📊 Download PowerPoint Deck",
+                    data=st.session_state['pptx_bytes'],
+                    file_name=f"{cached_customer_name.replace(' ', '_')}_MDR_Deck.pptx",
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                )
