@@ -1,5 +1,6 @@
 # Environments
 .env
+.DS_store
 .venv
 env/
 venv/
