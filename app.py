@@ -178,12 +178,11 @@ with st.sidebar:
     industry = st.selectbox("Industry Vertical", ["Healthcare", "Finance", "Manufacturing", "Retail", "Technology", "Education"])
     critical_infra = st.text_input("Critical Infrastructure/Crown Jewels", "Patient Records Database")
     
-    st.subheader("👥 The Human Element")
-    users = st.number_input("Number of Users", min_value=1, value=500)
-    st.subheader("👥 The Human Element")
+st.subheader("👥 The Human Element")
+    
+    # Make sure this line only appears ONCE!
     users = st.number_input("Number of Users", min_value=1, value=500)
     
-    # NEW: Descriptive Behavioral Tiers
     savviness_profiles = {
         "Tier 1: High Risk / Unaware": "Users frequently reuse passwords, ignore browser warnings, and are highly susceptible to basic phishing.",
         "Tier 2: Basic Compliance": "Users complete mandatory training but easily fall for targeted spear-phishing, urgency tactics, or MFA fatigue.",
@@ -196,13 +195,10 @@ with st.sidebar:
         options=list(savviness_profiles.keys()),
         index=1
     )
-    # Display the description underneath the dropdown so the user knows exactly what they selected
-    st.caption(f"*{savviness_profiles[savviness_label]}*")
     
-    # Store the FULL description to feed to the LLM later
+    st.caption(f"*{savviness_profiles[savviness_label]}*")
     savviness = f"{savviness_label} - {savviness_profiles[savviness_label]}"
     
-    in_house_team = st.radio("In-House Security Team?", ["No", "Yes (9-to-5)", "Yes (24/7)"])
     in_house_team = st.radio("In-House Security Team?", ["No", "Yes (9-to-5)", "Yes (24/7)"])
     
     st.subheader("💻 Technology Stack")
