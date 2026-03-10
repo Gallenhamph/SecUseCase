@@ -178,10 +178,10 @@ with st.sidebar:
     industry = st.selectbox("Industry Vertical", ["Healthcare", "Finance", "Manufacturing", "Retail", "Technology", "Education"])
     critical_infra = st.text_input("Critical Infrastructure/Crown Jewels", "Patient Records Database")
     
-st.subheader("👥 The Human Element")
+    st.subheader("👥 The Human Element")
     
     # Make sure this line only appears ONCE!
-users = st.number_input("Number of Users", min_value=1, value=500)
+    users = st.number_input("Number of Users", min_value=1, value=500)
     
     savviness_profiles = {
         "Tier 1: High Risk / Unaware": "Users frequently reuse passwords, ignore browser warnings, and are highly susceptible to basic phishing.",
