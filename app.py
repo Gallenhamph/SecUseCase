@@ -181,7 +181,7 @@ with st.sidebar:
 st.subheader("👥 The Human Element")
     
     # Make sure this line only appears ONCE!
-    users = st.number_input("Number of Users", min_value=1, value=500)
+users = st.number_input("Number of Users", min_value=1, value=500)
     
     savviness_profiles = {
         "Tier 1: High Risk / Unaware": "Users frequently reuse passwords, ignore browser warnings, and are highly susceptible to basic phishing.",
